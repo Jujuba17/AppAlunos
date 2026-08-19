@@ -1,0 +1,1880 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Acompanhamento de Alunos</title>
+<meta name="description" content="Controle de aulas semanais, licoes atribuidas, reprovacoes e faltas.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="theme-color" content="#059669">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Alunos">
+
+<style>
+/* ==========================================================================
+   1. TOKENS DE TEMA
+   ========================================================================== */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eceff4;
+  --border: #dde2ea;
+  --text: #101828;
+  --muted: #5c6675;
+  --accent: #047857;
+  --accent-soft: #d7f2e7;
+  --accent-ink: #ffffff;
+  --ok: #047857;      --ok-soft: #d7f2e7;
+  --warn: #a05a00;    --warn-soft: #fdeccd;
+  --bad: #c0281f;     --bad-soft: #fbdedb;
+  --info: #1f5fbf;    --info-soft: #dce8fb;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  --r: 14px;
+  --r-sm: 9px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1220;
+    --surface: #141c2b;
+    --surface-2: #1c2637;
+    --border: #2a364a;
+    --text: #e9edf4;
+    --muted: #97a2b4;
+    --accent: #10b981;
+    --accent-soft: #123a2f;
+    --accent-ink: #04140e;
+    --ok: #34d399;    --ok-soft: #10352a;
+    --warn: #fbbf24;  --warn-soft: #3a2c08;
+    --bad: #f87171;   --bad-soft: #3d1a19;
+    --info: #7cb0ff;  --info-soft: #14294a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1220;
+  --surface: #141c2b;
+  --surface-2: #1c2637;
+  --border: #2a364a;
+  --text: #e9edf4;
+  --muted: #97a2b4;
+  --accent: #10b981;
+  --accent-soft: #123a2f;
+  --accent-ink: #04140e;
+  --ok: #34d399;    --ok-soft: #10352a;
+  --warn: #fbbf24;  --warn-soft: #3a2c08;
+  --bad: #f87171;   --bad-soft: #3d1a19;
+  --info: #7cb0ff;  --info-soft: #14294a;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   2. BASE
+   ========================================================================== */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+h1, h2, h3 { margin: 0; font-weight: 650; line-height: 1.25; }
+h1 { font-size: 19px; }
+h2 { font-size: 16px; }
+h3 { font-size: 14px; }
+p { margin: 0; }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ==========================================================================
+   3. LAYOUT
+   ========================================================================== */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar .grow { flex: 1; min-width: 0; }
+.topbar .sub { font-size: 12px; color: var(--muted); }
+.icon-btn {
+  border: 0; background: var(--surface-2); color: var(--text);
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer; flex: 0 0 auto;
+}
+.icon-btn svg { width: 18px; height: 18px; }
+main { padding: 14px 16px calc(92px + var(--safe-b)); max-width: 720px; margin: 0 auto; }
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-b);
+}
+.tabbar a {
+  display: grid; place-items: center; gap: 2px;
+  padding: 8px 2px 9px; text-decoration: none;
+  color: var(--muted); font-size: 10.5px; font-weight: 550;
+}
+.tabbar a[aria-current="page"] { color: var(--accent); }
+.tabbar svg { width: 21px; height: 21px; }
+.tabbar[hidden] { display: none; }
+
+/* ==========================================================================
+   4. COMPONENTES
+   ========================================================================== */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px; box-shadow: var(--shadow);
+}
+.card + .card { margin-top: 10px; }
+.stack > * + * { margin-top: 10px; }
+.section { margin-top: 22px; }
+.section:first-child { margin-top: 4px; }
+.section-head { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 9px; }
+.section-head .grow { flex: 1; }
+.section-head h2 {
+  font-size: 12.5px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
+}
+.row { display: flex; align-items: center; gap: 11px; }
+.row .grow { flex: 1; min-width: 0; }
+.wrap { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.tiny { font-size: 11.5px; }
+.ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tap {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 13px 14px; box-shadow: var(--shadow);
+  text-decoration: none; color: inherit;
+}
+.tap + .tap { margin-top: 8px; }
+.tap:active { background: var(--surface-2); }
+.avatar {
+  width: 38px; height: 38px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: 14px;
+}
+.avatar svg { width: 19px; height: 19px; }
+.hero .avatar svg { width: 30px; height: 30px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2.5px 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  background: var(--surface-2); color: var(--muted);
+}
+.badge.ok   { background: var(--ok-soft);   color: var(--ok); }
+.badge.bad  { background: var(--bad-soft);  color: var(--bad); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.info { background: var(--info-soft); color: var(--info); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 15px; border-radius: var(--r-sm); cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-weight: 600; font-size: 14px; min-height: 42px;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.danger  { background: transparent; border-color: var(--bad); color: var(--bad); }
+.btn.ghost   { background: transparent; border-color: transparent; color: var(--accent); }
+.btn.block   { width: 100%; }
+.btn.sm      { padding: 6px 11px; min-height: 34px; font-size: 13px; }
+.btn svg { width: 16px; height: 16px; }
+label.field { display: block; margin-bottom: 12px; }
+label.field > span {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: var(--muted); margin-bottom: 5px;
+}
+input, select, textarea {
+  width: 100%; padding: 11px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  min-height: 44px;
+}
+textarea { min-height: 74px; resize: vertical; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent);
+}
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.seg { display: flex; gap: 5px; flex-wrap: wrap; }
+.seg button {
+  flex: 1 1 auto; min-width: 72px; padding: 8px 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  border-radius: var(--r-sm); font-size: 12.5px; font-weight: 600; min-height: 38px;
+}
+.seg button[aria-pressed="true"] { border-color: currentColor; }
+.seg button[aria-pressed="true"][data-v="aprovado"]    { background: var(--ok-soft);   color: var(--ok); }
+.seg button[aria-pressed="true"][data-v="reprovado"]   { background: var(--bad-soft);  color: var(--bad); }
+.seg button[aria-pressed="true"][data-v="revisar"]     { background: var(--warn-soft); color: var(--warn); }
+.seg button[aria-pressed="true"][data-v="nao_trouxe"]  { background: var(--surface-2); color: var(--text); }
+.seg button[aria-pressed="true"][data-v="pendente"]    { background: var(--info-soft); color: var(--info); }
+.seg button[aria-pressed="true"][data-v="realizada"]   { background: var(--ok-soft);   color: var(--ok); }
+.seg button[aria-pressed="true"][data-v="falta_aluno"] { background: var(--bad-soft);  color: var(--bad); }
+.seg button[aria-pressed="true"][data-v="cancelada"]   { background: var(--warn-soft); color: var(--warn); }
+.seg button[aria-pressed="true"][data-v="sem_aula"]    { background: var(--surface-2); color: var(--text); }
+.seg button[aria-pressed="true"][data-v="ativo"]       { background: var(--ok-soft);   color: var(--ok); }
+.seg button[aria-pressed="true"][data-v="pausado"]     { background: var(--warn-soft); color: var(--warn); }
+.seg button[aria-pressed="true"][data-v="parou"]       { background: var(--bad-soft);  color: var(--bad); }
+.seg button[aria-pressed="true"][data-v="auto"]        { background: var(--info-soft); color: var(--info); }
+.seg button[aria-pressed="true"][data-v="light"]       { background: var(--info-soft); color: var(--info); }
+.seg button[aria-pressed="true"][data-v="dark"]        { background: var(--info-soft); color: var(--info); }
+.bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.empty {
+  text-align: center; padding: 28px 18px; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: var(--r); font-size: 13.5px;
+}
+.empty strong { display: block; color: var(--text); margin-bottom: 5px; font-size: 15px; }
+hr.sep { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+.item {
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 11px 12px; background: var(--bg);
+}
+.item + .item { margin-top: 8px; }
+
+/* sheet / modal */
+.sheet-bg {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(8,12,20,.55);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.sheet {
+  background: var(--surface); width: 100%; max-width: 720px;
+  border-radius: 18px 18px 0 0; border: 1px solid var(--border);
+  max-height: 92vh; display: flex; flex-direction: column;
+  animation: up .2s ease-out;
+}
+@keyframes up { from { transform: translateY(16px); opacity: .5; } }
+@media (min-width: 721px) {
+  .sheet-bg { align-items: center; }
+  .sheet { border-radius: 18px; max-height: 88vh; }
+}
+.sheet-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.sheet-head .grow { flex: 1; min-width: 0; }
+.sheet-body { padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sheet-foot {
+  display: flex; gap: 9px; padding: 12px 16px;
+  padding-bottom: calc(12px + var(--safe-b));
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.sheet-foot .btn { flex: 1; }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(100px + var(--safe-b)); z-index: 200;
+  background: var(--text); color: var(--bg);
+  padding: 10px 16px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600;
+  box-shadow: var(--shadow); max-width: 90vw; text-align: center;
+}
+.toast.bad { background: var(--bad); color: #fff; }
+.spin {
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: sp .7s linear infinite; display: inline-block;
+}
+@keyframes sp { to { transform: rotate(360deg); } }
+.center-pad { padding: 56px 0; text-align: center; }
+.kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); gap: 9px; }
+.kpi > div {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 11px 12px;
+}
+.kpi b { display: block; font-size: 21px; line-height: 1.15; }
+.kpi span { font-size: 11.5px; color: var(--muted); }
+.banner {
+  padding: 9px 16px; font-size: 12.5px; font-weight: 600; text-align: center;
+  background: var(--warn-soft); color: var(--warn);
+}
+.hero { text-align: center; padding: 26px 4px 18px; }
+.hero .avatar { width: 62px; height: 62px; font-size: 24px; margin: 0 auto 12px; }
+</style>
+
+<header class="topbar" id="topbar"></header>
+<div id="banner"></div>
+<main id="view"><div class="center-pad"><span class="spin"></span></div></main>
+<nav class="tabbar" id="tabbar" hidden></nav>
+<div id="sheet-root"></div>
+<div id="toast-root"></div>
+
+<script>
+'use strict';
+
+/* ==========================================================================
+   1. CONFIGURACAO
+   Opcional: preencha BUILTIN antes do deploy na Vercel para nao precisar
+   digitar a conexao em cada aparelho. A anon key do Supabase e publica por
+   design - a seguranca vem do login + RLS (veja schema.sql).
+   ========================================================================== */
+const BUILTIN = { url: '', key: '' };
+
+const K_CFG = 'aa.cfg', K_SESS = 'aa.sess', K_CACHE = 'aa.cache', K_THEME = 'aa.theme';
+
+const WD = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado'];
+const WD_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+
+const RESULTS = {
+  pendente:   { l: 'Pendente',    c: 'info' },
+  aprovado:   { l: 'Aprovado',    c: 'ok' },
+  reprovado:  { l: 'Reprovado',   c: 'bad' },
+  revisar:    { l: 'Revisar',     c: 'warn' },
+  nao_trouxe: { l: 'Nao trouxe',  c: '' },
+};
+const SESS_ST = {
+  realizada:   { l: 'Realizada', c: 'ok' },
+  falta_aluno: { l: 'Faltou',    c: 'bad' },
+  cancelada:   { l: 'Cancelada', c: 'warn' },
+  sem_aula:    { l: 'Sem aula',  c: '' },
+};
+const STU_ST = {
+  ativo:   { l: 'Ativo',   grupo: 'Ativos',    c: 'ok' },
+  pausado: { l: 'Pausado', grupo: 'Pausados',  c: 'warn' },
+  parou:   { l: 'Parou',   grupo: 'Pararam',   c: 'bad' },
+};
+
+/* ==========================================================================
+   2. UTILITARIOS
+   ========================================================================== */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k)    { try { localStorage.removeItem(k); } catch {} },
+};
+
+function h(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  if (props) for (const k in props) {
+    const v = props[k];
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'for') e.htmlFor = v;
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k in e && typeof v !== 'object') { try { e[k] = v; } catch { e.setAttribute(k, v); } }
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  append(e, kids);
+  return e;
+}
+function append(e, kids) {
+  for (const k of kids.flat(9)) {
+    if (k == null || k === false || k === '') continue;
+    e.appendChild(k instanceof Node ? k : document.createTextNode(String(k)));
+  }
+}
+function svg(paths) {
+  const w = document.createElement('div');
+  w.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+                'stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
+  return w.firstElementChild;
+}
+const ic = {
+  hoje:    () => svg('<rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/>'),
+  alunos:  () => svg('<path d="M16 20.5V19a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1.5"/><circle cx="9" cy="7.5" r="3.5"/><path d="M22 20.5V19a4 4 0 0 0-3-3.87M16.5 4.2a3.5 3.5 0 0 1 0 6.6"/>'),
+  livros:  () => svg('<path d="M3 4.5h5.5A3.5 3.5 0 0 1 12 8v13a3 3 0 0 0-3-2.5H3z"/><path d="M21 4.5h-5.5A3.5 3.5 0 0 0 12 8v13a3 3 0 0 1 3-2.5h6z"/>'),
+  relat:   () => svg('<path d="M3 20.5h18"/><path d="M6.5 20.5v-6M11.5 20.5V4.5M16.5 20.5v-9M21 20.5v-4"/>'),
+  config:  () => svg('<path d="M3 6.5h18M3 12h18M3 17.5h18"/><circle cx="8.5" cy="6.5" r="2.2"/><circle cx="15" cy="12" r="2.2"/><circle cx="7" cy="17.5" r="2.2"/>'),
+  back:    () => svg('<path d="M15 5l-7 7 7 7"/>'),
+  close:   () => svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  plus:    () => svg('<path d="M12 5v14M5 12h14"/>'),
+  check:   () => svg('<path d="M4.5 12.5l5 5 10-11"/>'),
+  edit:    () => svg('<path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14.5 5.5l4 4"/>'),
+  trash:   () => svg('<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13"/>'),
+  refresh: () => svg('<path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 4.5V11h-6"/>'),
+};
+
+/* --- datas (sempre em horario local, formato ISO yyyy-mm-dd) --- */
+function isoOf(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function todayISO() { return isoOf(new Date()); }
+function parseISO(s) { const p = String(s).slice(0, 10).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function fmtDate(s) { if (!s) return '--'; const d = parseISO(s); return isoOf(d).split('-').reverse().join('/'); }
+function fmtShort(s) { if (!s) return '--'; const d = parseISO(s); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0'); }
+function fmtTime(t) { return t ? String(t).slice(0, 5) : ''; }
+function addDays(iso, n) { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoOf(d); }
+function daysBetween(a, b) { return Math.round((parseISO(b) - parseISO(a)) / 86400000); }
+function nextDateForWeekday(wd, from) {
+  const base = from || todayISO();
+  const diff = (wd - parseISO(base).getDay() + 7) % 7;
+  return addDays(base, diff);
+}
+function initials(name) {
+  const p = String(name || '?').trim().split(/\s+/);
+  return ((p[0] || '')[0] || '?').toUpperCase() + (p.length > 1 ? (p[p.length - 1][0] || '').toUpperCase() : '');
+}
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+
+/* --- UI: toast, sheet, confirmacao --- */
+function toast(msg, bad) {
+  const root = document.getElementById('toast-root');
+  root.textContent = '';
+  const t = h('div', { class: 'toast' + (bad ? ' bad' : '') }, msg);
+  root.appendChild(t);
+  setTimeout(() => t.remove(), bad ? 4500 : 2200);
+}
+let sheetStack = 0;
+function openSheet({ title, body, footer }) {
+  const root = document.getElementById('sheet-root');
+  const close = () => {
+    bg.remove();
+    sheetStack = Math.max(0, sheetStack - 1);
+    if (!sheetStack) document.body.style.overflow = '';
+  };
+  const sheet = h('div', { class: 'sheet' },
+    h('div', { class: 'sheet-head' },
+      h('h1', { class: 'grow ellip' }, title),
+      h('button', { class: 'icon-btn', 'aria-label': 'Fechar', onclick: close }, ic.close())),
+    h('div', { class: 'sheet-body' }, body),
+    footer ? h('div', { class: 'sheet-foot' }, footer) : null);
+  const bg = h('div', { class: 'sheet-bg', onclick: (e) => { if (e.target === bg) close(); } }, sheet);
+  root.appendChild(bg);
+  sheetStack++;
+  document.body.style.overflow = 'hidden';
+  return close;
+}
+function confirmSheet(title, msg, okLabel = 'Confirmar', danger = true) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; close(); resolve(v); } };
+    const close = openSheet({
+      title,
+      body: h('p', { class: 'muted' }, msg),
+      footer: [
+        h('button', { class: 'btn', onclick: () => finish(false) }, 'Cancelar'),
+        h('button', { class: 'btn ' + (danger ? 'danger' : 'primary'), onclick: () => finish(true) }, okLabel),
+      ],
+    });
+  });
+}
+function busy(btn, on) {
+  if (on) { btn.dataset.label = btn.textContent; btn.disabled = true; btn.textContent = ''; btn.appendChild(h('span', { class: 'spin' })); }
+  else { btn.disabled = false; btn.textContent = btn.dataset.label || 'Salvar'; }
+}
+
+/* ==========================================================================
+   3. CAMADA SUPABASE (REST puro, zero dependencias)
+   ========================================================================== */
+let CFG = store.get(K_CFG, null) || (BUILTIN.url && BUILTIN.key ? { ...BUILTIN } : null);
+let SESS = store.get(K_SESS, null);
+
+const apiBase = () => String(CFG.url).replace(/\/+$/, '');
+
+async function errMsg(res) {
+  try {
+    const j = await res.json();
+    return j.message || j.error_description || j.msg || j.hint || ('HTTP ' + res.status);
+  } catch { return 'HTTP ' + res.status; }
+}
+
+async function authFetch(path, init = {}, retry = true) {
+  const headers = Object.assign(
+    { apikey: CFG.key, 'Content-Type': 'application/json' },
+    init.headers || {});
+  if (SESS && SESS.access_token) headers.Authorization = 'Bearer ' + SESS.access_token;
+  const res = await fetch(apiBase() + path, { ...init, headers });
+  if (res.status === 401 && retry && SESS && SESS.refresh_token) {
+    if (await refreshToken()) return authFetch(path, init, false);
+    signOut();
+    throw new Error('Sessao expirada. Entre novamente.');
+  }
+  return res;
+}
+function saveSession(j) {
+  SESS = {
+    access_token: j.access_token,
+    refresh_token: j.refresh_token,
+    email: (j.user && j.user.email) || (SESS && SESS.email) || '',
+  };
+  store.set(K_SESS, SESS);
+}
+async function signIn(email, password) {
+  const res = await fetch(apiBase() + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { apikey: CFG.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error(await errMsg(res));
+  saveSession(await res.json());
+}
+async function refreshToken() {
+  try {
+    const res = await fetch(apiBase() + '/auth/v1/token?grant_type=refresh_token', {
+      method: 'POST',
+      headers: { apikey: CFG.key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: SESS.refresh_token }),
+    });
+    if (!res.ok) return false;
+    saveSession(await res.json());
+    return true;
+  } catch { return false; }
+}
+function signOut() {
+  SESS = null;
+  store.del(K_SESS);
+  store.del(K_CACHE);
+  DB = emptyDB();
+}
+
+async function sbSelect(table, order) {
+  const q = new URLSearchParams({ select: '*', limit: '2000' });
+  if (order) q.set('order', order);
+  const res = await authFetch('/rest/v1/' + table + '?' + q);
+  if (!res.ok) throw new Error(await errMsg(res));
+  return res.json();
+}
+async function sbInsert(table, row) {
+  const res = await authFetch('/rest/v1/' + table, {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) throw new Error(await errMsg(res));
+  const j = await res.json();
+  return Array.isArray(j) ? j[0] : j;
+}
+async function sbUpdate(table, id, patch) {
+  const res = await authFetch('/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await errMsg(res));
+  const j = await res.json();
+  return Array.isArray(j) ? j[0] : j;
+}
+async function sbDelete(table, id) {
+  const res = await authFetch('/rest/v1/' + table + '?id=eq.' + id, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await errMsg(res));
+}
+
+/* ==========================================================================
+   4. ESTADO E REGRAS DE NEGOCIO
+   ========================================================================== */
+const emptyDB = () => ({ students: [], books: [], enrollments: [], sessions: [], assignments: [] });
+let DB = store.get(K_CACHE, null) || emptyDB();
+let STALE = false;
+
+async function loadAll() {
+  const [students, books, enrollments, sessions, assignments] = await Promise.all([
+    sbSelect('students', 'name.asc'),
+    sbSelect('books', 'title.asc'),
+    sbSelect('enrollments', 'started_on.asc'),
+    sbSelect('sessions', 'session_date.desc'),
+    sbSelect('assignments', 'assigned_on.asc'),
+  ]);
+  DB = { students, books, enrollments, sessions, assignments };
+  store.set(K_CACHE, DB);
+  STALE = false;
+}
+async function reload() { await loadAll(); render(); }
+
+const student = (id) => DB.students.find((s) => s.id === id);
+const book = (id) => DB.books.find((b) => b.id === id);
+const bookTitle = (id) => (book(id) || {}).title || 'Livro removido';
+
+const studentEnrollments = (sid) =>
+  DB.enrollments.filter((e) => e.student_id === sid && book(e.book_id));
+const activeEnrollments = (sid) => studentEnrollments(sid).filter((e) => e.active);
+const studentAssignments = (sid) => DB.assignments.filter((a) => a.student_id === sid);
+const pendingOf = (sid) => studentAssignments(sid).filter((a) => a.result === 'pendente');
+const studentSessions = (sid) =>
+  DB.sessions.filter((s) => s.student_id === sid)
+    .slice().sort((a, b) => String(b.session_date).localeCompare(String(a.session_date)));
+
+function bookProgress(sid, bid) {
+  const b = book(bid);
+  const total = b ? b.lesson_count : 0;
+  const done = new Set(DB.assignments
+    .filter((a) => a.student_id === sid && a.book_id === bid && a.result === 'aprovado')
+    .map((a) => a.lesson_no)).size;
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+/** Menor licao do livro que ainda nao foi aprovada nem esta pendente. */
+function suggestNextLesson(sid, bid) {
+  const b = book(bid);
+  if (!b) return 1;
+  const taken = new Set(DB.assignments
+    .filter((a) => a.student_id === sid && a.book_id === bid &&
+                   (a.result === 'aprovado' || a.result === 'pendente'))
+    .map((a) => a.lesson_no));
+  for (let i = 1; i <= b.lesson_count; i++) if (!taken.has(i)) return i;
+  return b.lesson_count;
+}
+const attemptsFor = (sid, bid, lesson) =>
+  DB.assignments.filter((a) => a.student_id === sid && a.book_id === bid && a.lesson_no === lesson).length;
+
+/** Licoes que o aluno reprovou, agrupadas por livro+licao, mais reprovadas primeiro. */
+function failuresOf(sid) {
+  const m = new Map();
+  for (const a of DB.assignments) {
+    if (a.student_id !== sid || a.result !== 'reprovado') continue;
+    const k = a.book_id + '#' + a.lesson_no;
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  return [...m.entries()]
+    .map(([k, n]) => ({ book_id: k.split('#')[0], lesson_no: +k.split('#')[1], count: n }))
+    .sort((x, y) => y.count - x.count || x.lesson_no - y.lesson_no);
+}
+function nextClassDate(st) {
+  if (st.weekday == null || st.status !== 'ativo') return null;
+  return nextDateForWeekday(st.weekday);
+}
+const sortByTime = (a, b) => String(a.class_time || '99').localeCompare(String(b.class_time || '99'));
+
+/* ==========================================================================
+   5. PECAS DE UI REUTILIZAVEIS
+   ========================================================================== */
+function badge(text, cls) { return h('span', { class: 'badge' + (cls ? ' ' + cls : '') }, text); }
+function resultBadge(r) { const m = RESULTS[r] || { l: r, c: '' }; return badge(m.l, m.c); }
+function statusBadge(s) { const m = SESS_ST[s] || { l: s, c: '' }; return badge(m.l, m.c); }
+
+function segmented(options, current, onPick) {
+  const wrap = h('div', { class: 'seg' });
+  const btns = options.map(([value, label]) =>
+    h('button', {
+      type: 'button', 'data-v': value, 'aria-pressed': String(value === current),
+      onclick: () => {
+        btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === value)));
+        onPick(value);
+      },
+    }, label));
+  append(wrap, btns);
+  return wrap;
+}
+function field(label, control) { return h('label', { class: 'field' }, h('span', {}, label), control); }
+function emptyState(title, msg, action) {
+  return h('div', { class: 'empty' }, h('strong', {}, title), h('div', {}, msg), action ? h('div', { style: 'margin-top:12px' }, action) : null);
+}
+function sectionHead(title, action) {
+  return h('div', { class: 'section-head' }, h('h2', { class: 'grow' }, title), action || null);
+}
+function lessonLabel(a) {
+  return (a.lesson_label && String(a.lesson_label).trim())
+    ? a.lesson_label
+    : 'Licao ' + a.lesson_no;
+}
+function progressRow(sid, en) {
+  const p = bookProgress(sid, en.book_id);
+  return h('div', { class: 'item' },
+    h('div', { class: 'row' },
+      h('div', { class: 'grow' },
+        h('div', { class: 'ellip', style: 'font-weight:600' }, bookTitle(en.book_id)),
+        h('div', { class: 'tiny muted' }, p.done + ' de ' + p.total + ' licoes aprovadas' + (en.active ? '' : ' - encerrado'))),
+      badge(p.pct + '%', p.pct >= 100 ? 'ok' : '')),
+    h('div', { class: 'bar', style: 'margin-top:8px' }, h('i', { style: 'width:' + p.pct + '%' })));
+}
+
+/* ==========================================================================
+   6. TOPBAR / TABBAR
+   ========================================================================== */
+function setTopbar(title, sub, opts = {}) {
+  const bar = document.getElementById('topbar');
+  bar.textContent = '';
+  append(bar, [
+    opts.back ? h('button', { class: 'icon-btn', 'aria-label': 'Voltar', onclick: opts.back }, ic.back()) : null,
+    h('div', { class: 'grow' },
+      h('h1', { class: 'ellip' }, title),
+      sub ? h('div', { class: 'sub ellip' }, sub) : null),
+    opts.action || null,
+  ]);
+}
+const TABS = [
+  ['#/hoje', 'Hoje', ic.hoje],
+  ['#/alunos', 'Alunos', ic.alunos],
+  ['#/livros', 'Livros', ic.livros],
+  ['#/relatorios', 'Relatorios', ic.relat],
+  ['#/config', 'Config', ic.config],
+];
+function renderTabbar(current) {
+  const bar = document.getElementById('tabbar');
+  bar.hidden = false;
+  bar.textContent = '';
+  append(bar, TABS.map(([href, label, icon]) =>
+    h('a', { href, 'aria-current': href === current ? 'page' : null }, icon(), h('span', {}, label))));
+}
+function setBanner(text) {
+  const b = document.getElementById('banner');
+  b.textContent = '';
+  if (text) b.appendChild(h('div', { class: 'banner' }, text));
+}
+function mount(node) {
+  const v = document.getElementById('view');
+  v.textContent = '';
+  append(v, [node]);
+  window.scrollTo(0, 0);
+}
+
+/* ==========================================================================
+   7. TELAS DE ENTRADA (conexao e login)
+   ========================================================================== */
+function viewSetup() {
+  document.getElementById('tabbar').hidden = true;
+  setTopbar('Conectar', 'Passo unico por aparelho');
+  let url = (CFG && CFG.url) || '';
+  let key = (CFG && CFG.key) || '';
+  const btn = h('button', { class: 'btn primary block', onclick: save }, 'Salvar conexao');
+
+  async function save() {
+    if (!url.trim() || !key.trim()) return toast('Preencha os dois campos.', true);
+    CFG = { url: url.trim(), key: key.trim() };
+    store.set(K_CFG, CFG);
+    toast('Conexao salva.');
+    render();
+  }
+  return h('div', {},
+    h('div', { class: 'hero' },
+      h('div', { class: 'avatar' }, ic.check()),
+      h('h1', {}, 'Acompanhamento de Alunos'),
+      h('p', { class: 'muted small', style: 'margin-top:6px' },
+        'Cole os dados do seu projeto Supabase. Ficam salvos apenas neste aparelho.')),
+    h('div', { class: 'card' },
+      field('URL do projeto', h('input', {
+        type: 'url', placeholder: 'https://xxxx.supabase.co', value: url,
+        oninput: (e) => { url = e.target.value; },
+      })),
+      field('Chave anon (public)', h('textarea', {
+        placeholder: 'eyJhbGciOi...', value: key, style: 'min-height:88px;font-size:12px',
+        oninput: (e) => { key = e.target.value; },
+      })),
+      btn,
+      h('p', { class: 'tiny muted', style: 'margin-top:12px' },
+        'Supabase > Project Settings > API. Use a chave "anon public", nunca a "service_role".')));
+}
+
+function viewLogin() {
+  document.getElementById('tabbar').hidden = true;
+  setTopbar('Entrar', SESS && SESS.email ? SESS.email : apiBase().replace(/^https?:\/\//, ''));
+  let email = '', password = '';
+  const btn = h('button', { class: 'btn primary block', onclick: submit }, 'Entrar');
+  const form = h('form', { onsubmit: (e) => { e.preventDefault(); submit(); } },
+    field('E-mail', h('input', {
+      type: 'email', autocomplete: 'username', required: true,
+      oninput: (e) => { email = e.target.value; },
+    })),
+    field('Senha', h('input', {
+      type: 'password', autocomplete: 'current-password', required: true,
+      oninput: (e) => { password = e.target.value; },
+    })),
+    btn);
+
+  async function submit() {
+    if (!email || !password) return toast('Informe e-mail e senha.', true);
+    busy(btn, true);
+    try {
+      await signIn(email, password);
+      await loadAll();
+      toast('Conectado.');
+      render();
+    } catch (e) {
+      toast(e.message || 'Falha no login', true);
+    } finally { busy(btn, false); }
+  }
+  return h('div', {},
+    h('div', { class: 'hero' },
+      h('div', { class: 'avatar' }, ic.check()),
+      h('h1', {}, 'Acompanhamento de Alunos')),
+    h('div', { class: 'card' }, form),
+    h('button', {
+      class: 'btn ghost block', style: 'margin-top:14px',
+      onclick: () => { CFG = null; store.del(K_CFG); render(); },
+    }, 'Trocar conexao'));
+}
+
+/* ==========================================================================
+   8. TELA: HOJE
+   ========================================================================== */
+function viewHoje() {
+  const today = todayISO();
+  const dow = parseISO(today).getDay();
+  setTopbar('Hoje', WD[dow] + ', ' + fmtDate(today), {
+    action: h('button', { class: 'icon-btn', 'aria-label': 'Atualizar', onclick: refreshNow }, ic.refresh()),
+  });
+
+  const actives = DB.students.filter((s) => s.status === 'ativo');
+  const todayStudents = actives.filter((s) => s.weekday === dow).sort(sortByTime);
+  const openPending = actives.reduce((n, s) => n + pendingOf(s.id).length, 0);
+  const monthStart = today.slice(0, 7) + '-01';
+  const absences = DB.sessions.filter((s) => s.session_date >= monthStart && s.status === 'falta_aluno').length;
+
+  const upcoming = [];
+  for (let i = 1; i <= 7; i++) {
+    const d = addDays(today, i);
+    const wd = parseISO(d).getDay();
+    const list = actives.filter((s) => s.weekday === wd).sort(sortByTime);
+    if (list.length) upcoming.push({ date: d, wd, list });
+  }
+
+  return h('div', {},
+    h('div', { class: 'section' },
+      h('div', { class: 'kpi' },
+        h('div', {}, h('b', {}, todayStudents.length), h('span', {}, 'aulas hoje')),
+        h('div', {}, h('b', {}, openPending), h('span', {}, 'licoes pendentes')),
+        h('div', {}, h('b', {}, actives.length), h('span', {}, 'alunos ativos')),
+        h('div', {}, h('b', {}, absences), h('span', {}, 'faltas no mes')))),
+
+    h('div', { class: 'section' },
+      sectionHead('Aulas de hoje'),
+      todayStudents.length
+        ? todayStudents.map((s) => todayCard(s, today))
+        : emptyState('Nenhuma aula hoje',
+            'Nenhum aluno ativo tem aula na ' + WD[dow] + '.',
+            h('a', { class: 'btn sm', href: '#/alunos' }, 'Ver alunos'))),
+
+    h('div', { class: 'section' },
+      sectionHead('Proximos 7 dias'),
+      upcoming.length
+        ? upcoming.map((g) => h('div', { class: 'card' },
+            h('div', { class: 'row', style: 'margin-bottom:8px' },
+              h('div', { class: 'grow', style: 'font-weight:600' }, WD[g.wd] + ' - ' + fmtShort(g.date)),
+              badge(plural(g.list.length, 'aula', 'aulas'))),
+            g.list.map((s) => h('div', { class: 'row small', style: 'padding:3px 0' },
+              h('span', { class: 'muted', style: 'width:44px' }, fmtTime(s.class_time) || '--'),
+              h('a', { class: 'grow ellip', href: '#/aluno/' + s.id, style: 'text-decoration:none;color:inherit' }, s.name),
+              pendingOf(s.id).length ? badge(pendingOf(s.id).length + ' pend.', 'info') : null))))
+        : emptyState('Semana livre', 'Nenhum aluno ativo com dia de aula definido.')));
+}
+
+function todayCard(st, today) {
+  const pend = pendingOf(st.id);
+  const done = DB.sessions.find((s) => s.student_id === st.id && s.session_date === today);
+  return h('div', { class: 'card' },
+    h('div', { class: 'row' },
+      h('div', { class: 'avatar' }, initials(st.name)),
+      h('div', { class: 'grow' },
+        h('div', { class: 'ellip', style: 'font-weight:650' }, st.name),
+        h('div', { class: 'tiny muted' },
+          (fmtTime(st.class_time) ? fmtTime(st.class_time) + ' - ' : '') +
+          (pend.length ? plural(pend.length, 'licao para conferir', 'licoes para conferir') : 'sem licoes pendentes'))),
+      done ? statusBadge(done.status) : null),
+    pend.length
+      ? h('div', { style: 'margin-top:10px' },
+          h('div', { class: 'wrap' }, pend.map((a) =>
+            badge(lessonLabel(a) + ' - ' + bookTitle(a.book_id), 'info'))))
+      : null,
+    h('div', { class: 'row', style: 'margin-top:12px;gap:8px' },
+      h('button', { class: 'btn primary grow', onclick: () => sheetSession(st.id, done || null) },
+        done ? 'Editar aula de hoje' : 'Registrar aula'),
+      h('a', { class: 'btn', href: '#/aluno/' + st.id }, 'Abrir')));
+}
+
+async function refreshNow() {
+  try { await loadAll(); render(); toast('Atualizado.'); }
+  catch (e) { toast(e.message || 'Falha ao atualizar', true); }
+}
+
+/* ==========================================================================
+   9. TELA: ALUNOS
+   ========================================================================== */
+let studentQuery = '';
+function viewAlunos() {
+  setTopbar('Alunos', plural(DB.students.length, 'cadastrado', 'cadastrados'), {
+    action: h('button', { class: 'icon-btn', 'aria-label': 'Novo aluno', onclick: () => sheetStudent(null) }, ic.plus()),
+  });
+
+  const search = h('input', {
+    type: 'search', placeholder: 'Buscar aluno...', value: studentQuery,
+    oninput: (e) => { studentQuery = e.target.value; renderList(); },
+  });
+  const listBox = h('div', {});
+
+  function renderList() {
+    const q = studentQuery.trim().toLowerCase();
+    const found = DB.students.filter((s) => !q || s.name.toLowerCase().includes(q));
+    listBox.textContent = '';
+    if (!DB.students.length) {
+      append(listBox, [emptyState('Nenhum aluno ainda',
+        'Cadastre o primeiro aluno com o botao + no topo.',
+        h('button', { class: 'btn primary sm', onclick: () => sheetStudent(null) }, 'Novo aluno'))]);
+      return;
+    }
+    if (!found.length) {
+      append(listBox, [emptyState('Nada encontrado', 'Nenhum aluno com "' + studentQuery + '".')]);
+      return;
+    }
+    for (const key of ['ativo', 'pausado', 'parou']) {
+      const group = found.filter((s) => s.status === key)
+        .sort((a, b) => (a.weekday ?? 9) - (b.weekday ?? 9) || sortByTime(a, b) || a.name.localeCompare(b.name));
+      if (!group.length) continue;
+      append(listBox, [
+        h('div', { class: 'section' },
+          sectionHead(STU_ST[key].grupo + ' (' + group.length + ')'),
+          group.map(studentRow)),
+      ]);
+    }
+  }
+  renderList();
+  return h('div', {}, h('div', { class: 'section' }, search), listBox);
+}
+
+function studentRow(st) {
+  const pend = pendingOf(st.id).length;
+  const fails = failuresOf(st.id).reduce((n, f) => n + f.count, 0);
+  const when = st.weekday != null
+    ? WD_SHORT[st.weekday] + (st.class_time ? ' ' + fmtTime(st.class_time) : '')
+    : 'sem dia definido';
+  return h('a', { class: 'tap', href: '#/aluno/' + st.id },
+    h('div', { class: 'row' },
+      h('div', { class: 'avatar' }, initials(st.name)),
+      h('div', { class: 'grow' },
+        h('div', { class: 'ellip', style: 'font-weight:650' }, st.name),
+        h('div', { class: 'tiny muted ellip' },
+          when + ' - ' + plural(activeEnrollments(st.id).length, 'livro', 'livros'))),
+      h('div', { class: 'wrap', style: 'justify-content:flex-end;max-width:44%' },
+        st.status !== 'ativo' ? badge(STU_ST[st.status].l, STU_ST[st.status].c) : null,
+        pend ? badge(pend + ' pend.', 'info') : null,
+        fails ? badge(fails + ' repr.', 'bad') : null)));
+}
+
+/* ==========================================================================
+   10. TELA: DETALHE DO ALUNO
+   ========================================================================== */
+function viewAluno(id) {
+  const st = student(id);
+  if (!st) {
+    setTopbar('Aluno', null, { back: () => { location.hash = '#/alunos'; } });
+    return emptyState('Aluno nao encontrado', 'Ele pode ter sido removido.',
+      h('a', { class: 'btn sm', href: '#/alunos' }, 'Voltar'));
+  }
+  const info = STU_ST[st.status];
+  setTopbar(st.name,
+    (st.weekday != null ? WD[st.weekday] + (st.class_time ? ' as ' + fmtTime(st.class_time) : '') : 'sem dia de aula') +
+      ' - desde ' + fmtDate(st.start_date),
+    {
+      back: () => { location.hash = '#/alunos'; },
+      action: h('button', { class: 'icon-btn', 'aria-label': 'Editar', onclick: () => sheetStudent(st) }, ic.edit()),
+    });
+
+  const pend = pendingOf(st.id);
+  const fails = failuresOf(st.id);
+  const sessions = studentSessions(st.id);
+  const enrolls = studentEnrollments(st.id);
+  const next = nextClassDate(st);
+
+  return h('div', {},
+    /* --- resumo e acoes --- */
+    h('div', { class: 'section' },
+      h('div', { class: 'card' },
+        h('div', { class: 'wrap' },
+          badge(info.l, info.c),
+          next ? badge('Proxima aula ' + fmtShort(next), 'info') : null,
+          st.status === 'parou' && st.stopped_on ? badge('Parou em ' + fmtShort(st.stopped_on), 'bad') : null,
+          st.contact ? badge(st.contact) : null),
+        st.notes ? h('p', { class: 'small muted', style: 'margin-top:10px;white-space:pre-wrap' }, st.notes) : null,
+        st.status === 'parou' && st.stop_reason
+          ? h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Motivo: ' + st.stop_reason) : null,
+        h('div', { class: 'row', style: 'margin-top:12px;gap:8px' },
+          h('button', { class: 'btn primary grow', onclick: () => sheetSession(st.id, null) }, 'Registrar aula'),
+          h('button', { class: 'btn', onclick: () => sheetStatus(st) }, 'Status')))),
+
+    /* --- licoes pendentes --- */
+    h('div', { class: 'section' },
+      sectionHead('Licoes para a proxima aula'),
+      pend.length
+        ? h('div', { class: 'card' }, pend.map((a) => h('div', { class: 'item' },
+            h('div', { class: 'row' },
+              h('div', { class: 'grow' },
+                h('div', { style: 'font-weight:600' }, lessonLabel(a)),
+                h('div', { class: 'tiny muted ellip' },
+                  bookTitle(a.book_id) + ' - passada em ' + fmtDate(a.assigned_on) +
+                  (a.attempt_no > 1 ? ' - tentativa ' + a.attempt_no : ''))),
+              resultBadge('pendente')))))
+        : emptyState('Nada pendente', 'Registre uma aula para atribuir as proximas licoes.')),
+
+    /* --- livros --- */
+    h('div', { class: 'section' },
+      sectionHead('Livros', h('button', { class: 'btn sm', onclick: () => sheetEnroll(st.id) }, 'Adicionar')),
+      enrolls.length
+        ? h('div', { class: 'card' }, enrolls.map((en) => h('div', {},
+            progressRow(st.id, en),
+            h('div', { class: 'wrap', style: 'margin-top:6px;justify-content:flex-end' },
+              h('button', { class: 'btn sm ghost', onclick: () => toggleEnroll(en) }, en.active ? 'Encerrar livro' : 'Reativar'),
+              h('button', { class: 'btn sm ghost', style: 'color:var(--bad)', onclick: () => removeEnroll(en) }, 'Remover')))))
+        : emptyState('Nenhum livro', 'Adicione o livro que o aluno esta usando.',
+            h('button', { class: 'btn primary sm', onclick: () => sheetEnroll(st.id) }, 'Adicionar livro'))),
+
+    /* --- reprovacoes --- */
+    fails.length
+      ? h('div', { class: 'section' },
+          sectionHead('Licoes reprovadas'),
+          h('div', { class: 'card' }, fails.map((f) => h('div', { class: 'item' },
+            h('div', { class: 'row' },
+              h('div', { class: 'grow' },
+                h('div', { style: 'font-weight:600' }, 'Licao ' + f.lesson_no),
+                h('div', { class: 'tiny muted ellip' }, bookTitle(f.book_id))),
+              badge(plural(f.count, 'reprovacao', 'reprovacoes'), f.count > 1 ? 'bad' : 'warn'))))))
+      : null,
+
+    /* --- historico --- */
+    h('div', { class: 'section' },
+      sectionHead('Historico de aulas (' + sessions.length + ')'),
+      sessions.length
+        ? sessions.map((s) => sessionCard(st.id, s))
+        : emptyState('Sem aulas registradas', 'O historico aparece aqui conforme voce registra as aulas.')));
+}
+
+function sessionCard(sid, s) {
+  const reviewed = DB.assignments.filter((a) => a.review_session_id === s.id);
+  const assigned = DB.assignments.filter((a) => a.assigned_session_id === s.id);
+  return h('div', { class: 'card' },
+    h('div', { class: 'row' },
+      h('div', { class: 'grow' },
+        h('div', { style: 'font-weight:650' }, fmtDate(s.session_date)),
+        h('div', { class: 'tiny muted' }, WD[parseISO(s.session_date).getDay()])),
+      statusBadge(s.status),
+      h('button', { class: 'icon-btn', 'aria-label': 'Editar aula', onclick: () => sheetSession(sid, s) }, ic.edit())),
+    reviewed.length
+      ? h('div', { style: 'margin-top:10px' },
+          h('div', { class: 'tiny muted', style: 'margin-bottom:5px' }, 'Conferidas nesta aula'),
+          h('div', { class: 'wrap' }, reviewed.map((a) =>
+            badge(lessonLabel(a) + ': ' + RESULTS[a.result].l, RESULTS[a.result].c))))
+      : null,
+    assigned.length
+      ? h('div', { style: 'margin-top:10px' },
+          h('div', { class: 'tiny muted', style: 'margin-bottom:5px' }, 'Passadas para a proxima'),
+          h('div', { class: 'wrap' }, assigned.map((a) =>
+            badge(lessonLabel(a) + ' - ' + bookTitle(a.book_id)))))
+      : null,
+    s.notes ? h('p', { class: 'small muted', style: 'margin-top:10px;white-space:pre-wrap' }, s.notes) : null);
+}
+
+/* ==========================================================================
+   11. SHEET: REGISTRAR / EDITAR AULA  (fluxo principal)
+   ========================================================================== */
+function sheetSession(sid, existing) {
+  const st = student(sid);
+  const state = {
+    date: existing ? existing.session_date : todayISO(),
+    status: existing ? existing.status : 'realizada',
+    notes: existing ? (existing.notes || '') : '',
+  };
+
+  /* Licoes a conferir: as pendentes + as que ja foram conferidas nesta aula.
+     Exclui as licoes passadas nesta propria aula - nao se confere na mesma aula. */
+  const toReview = [
+    ...DB.assignments.filter((a) =>
+      a.student_id === sid && a.result === 'pendente' &&
+      !(existing && a.assigned_session_id === existing.id)),
+    ...(existing ? DB.assignments.filter((a) => a.review_session_id === existing.id && a.result !== 'pendente') : []),
+  ];
+  const results = new Map(toReview.map((a) => [a.id, a.result]));
+
+  /* Licoes passadas para a proxima aula. */
+  const nextItems = existing
+    ? DB.assignments.filter((a) => a.assigned_session_id === existing.id)
+        .map((a) => ({ key: a.id, id: a.id, book_id: a.book_id, lesson_no: a.lesson_no, lesson_label: a.lesson_label || '' }))
+    : [];
+  const removedIds = [];
+  let keySeq = 1;
+
+  const enrolls = activeEnrollments(sid);
+  const reviewBox = h('div', {});
+  const nextBox = h('div', {});
+  const addBox = h('div', {});
+  const bodyWrap = h('div', {});
+
+  /* ---- lista "conferir licoes" ---- */
+  function drawReview() {
+    reviewBox.textContent = '';
+    if (state.status !== 'realizada') {
+      append(reviewBox, [h('p', { class: 'small muted' },
+        'Aula nao realizada: as licoes pendentes continuam pendentes para a proxima aula.')]);
+      return;
+    }
+    if (!toReview.length) {
+      append(reviewBox, [h('p', { class: 'small muted' }, 'Nenhuma licao pendente para conferir.')]);
+      return;
+    }
+    append(reviewBox, toReview.map((a) => h('div', { class: 'item' },
+      h('div', { style: 'font-weight:600' }, lessonLabel(a)),
+      h('div', { class: 'tiny muted', style: 'margin-bottom:8px' },
+        bookTitle(a.book_id) + ' - passada em ' + fmtDate(a.assigned_on) +
+        (a.attempt_no > 1 ? ' - tentativa ' + a.attempt_no : '')),
+      segmented(
+        [['aprovado', 'Aprovado'], ['reprovado', 'Reprovado'], ['revisar', 'Revisar'],
+         ['nao_trouxe', 'Nao trouxe'], ['pendente', 'Deixar pendente']],
+        results.get(a.id),
+        (v) => {
+          results.set(a.id, v);
+          /* Reprovou ou revisar: ja sugere repetir a mesma licao na proxima aula. */
+          if (v === 'reprovado' || v === 'revisar') addNextItem(a.book_id, a.lesson_no, a.lesson_label || '', true);
+          drawNext();
+        }))));
+  }
+
+  /* ---- lista "licoes da proxima aula" ---- */
+  function addNextItem(book_id, lesson_no, lesson_label, silent) {
+    if (nextItems.some((it) => it.book_id === book_id && it.lesson_no === lesson_no)) {
+      if (!silent) toast('Essa licao ja esta na lista.');
+      return;
+    }
+    nextItems.push({ key: 'n' + keySeq++, id: null, book_id, lesson_no, lesson_label: lesson_label || '' });
+  }
+  function drawNext() {
+    nextBox.textContent = '';
+    if (!nextItems.length) {
+      append(nextBox, [h('p', { class: 'small muted' }, 'Nenhuma licao adicionada ainda.')]);
+      return;
+    }
+    append(nextBox, nextItems.map((it) => h('div', { class: 'item' },
+      h('div', { class: 'row' },
+        h('div', { class: 'grow' },
+          h('div', { style: 'font-weight:600' }, it.lesson_label || ('Licao ' + it.lesson_no)),
+          h('div', { class: 'tiny muted ellip' },
+            bookTitle(it.book_id) +
+            (attemptsFor(sid, it.book_id, it.lesson_no) && !it.id
+              ? ' - tentativa ' + (attemptsFor(sid, it.book_id, it.lesson_no) + 1) : ''))),
+        h('button', {
+          class: 'icon-btn', 'aria-label': 'Remover',
+          onclick: () => {
+            if (it.id) removedIds.push(it.id);
+            nextItems.splice(nextItems.indexOf(it), 1);
+            drawNext();
+          },
+        }, ic.close())))));
+  }
+
+  /* Sugestao de proxima licao considerando tambem o que ja foi adicionado agora. */
+  function localSuggest(bid) {
+    const b = book(bid);
+    if (!b) return 1;
+    const taken = new Set(DB.assignments
+      .filter((a) => a.student_id === sid && a.book_id === bid &&
+                     (a.result === 'aprovado' || a.result === 'pendente'))
+      .map((a) => a.lesson_no));
+    for (const it of nextItems) if (it.book_id === bid) taken.add(it.lesson_no);
+    for (let i = 1; i <= b.lesson_count; i++) if (!taken.has(i)) return i;
+    return b.lesson_count;
+  }
+
+  /* ---- formulario de adicionar licao ---- */
+  function drawAdd() {
+    addBox.textContent = '';
+    if (!enrolls.length) {
+      append(addBox, [h('p', { class: 'small muted' },
+        'Este aluno nao tem livro ativo. Adicione um livro na tela do aluno para poder atribuir licoes.')]);
+      return;
+    }
+    let bid = enrolls[0].book_id;
+    const lessonInput = h('input', {
+      type: 'number', min: 1, inputmode: 'numeric', value: localSuggest(bid),
+    });
+    const labelInput = h('input', { type: 'text', placeholder: 'Rotulo opcional (ex: pag. 42)' });
+    const bookSel = h('select', {
+      onchange: (e) => { bid = e.target.value; lessonInput.value = localSuggest(bid); },
+    }, enrolls.map((en) => h('option', { value: en.book_id }, bookTitle(en.book_id))));
+
+    append(addBox, [
+      field('Livro', bookSel),
+      h('div', { class: 'grid2' },
+        field('Licao n.', lessonInput),
+        field('Rotulo', labelInput)),
+      h('button', {
+        class: 'btn block', onclick: () => {
+          const n = parseInt(lessonInput.value, 10);
+          const b = book(bid);
+          if (!n || n < 1) return toast('Numero de licao invalido.', true);
+          if (b && n > b.lesson_count) return toast('O livro tem ' + b.lesson_count + ' licoes.', true);
+          addNextItem(bid, n, labelInput.value.trim());
+          labelInput.value = '';
+          drawNext();
+          lessonInput.value = localSuggest(bid);
+        },
+      }, 'Adicionar licao'),
+    ]);
+  }
+
+  function drawBody() {
+    bodyWrap.textContent = '';
+    append(bodyWrap, [
+      field('Data da aula', h('input', {
+        type: 'date', value: state.date, max: addDays(todayISO(), 30),
+        onchange: (e) => { state.date = e.target.value || state.date; },
+      })),
+      field('O que aconteceu', segmented(
+        [['realizada', 'Realizada'], ['falta_aluno', 'Aluno faltou'],
+         ['cancelada', 'Cancelada'], ['sem_aula', 'Sem aula']],
+        state.status,
+        (v) => { state.status = v; drawReview(); toggleNextVisibility(); })),
+      h('hr', { class: 'sep' }),
+      h('h3', { style: 'margin-bottom:8px' }, 'Conferir licoes da aula anterior'),
+      reviewBox,
+      nextSection,
+      h('hr', { class: 'sep' }),
+      field('Observacoes', h('textarea', {
+        placeholder: 'Anotacoes da aula...', value: state.notes,
+        oninput: (e) => { state.notes = e.target.value; },
+      })),
+    ]);
+    drawReview();
+    drawNext();
+    drawAdd();
+    toggleNextVisibility();
+  }
+
+  const nextSection = h('div', {},
+    h('hr', { class: 'sep' }),
+    h('h3', { style: 'margin-bottom:8px' }, 'Licoes para a proxima aula'),
+    nextBox,
+    h('div', { style: 'margin-top:12px' }, addBox));
+
+  function toggleNextVisibility() {
+    nextSection.hidden = state.status !== 'realizada';
+  }
+
+  const saveBtn = h('button', { class: 'btn primary', onclick: save }, existing ? 'Salvar alteracoes' : 'Registrar aula');
+  const footer = [h('button', { class: 'btn', onclick: () => close() }, 'Cancelar'), saveBtn];
+  if (existing) {
+    footer.unshift(h('button', {
+      class: 'btn danger', style: 'flex:0 0 auto;padding:10px 12px', 'aria-label': 'Excluir aula',
+      onclick: async () => {
+        if (!await confirmSheet('Excluir aula?',
+          'A aula de ' + fmtDate(existing.session_date) + ' sera removida. As licoes conferidas nela voltam a pendente.',
+          'Excluir')) return;
+        try {
+          for (const a of DB.assignments.filter((x) => x.review_session_id === existing.id)) {
+            await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
+          }
+          for (const a of DB.assignments.filter((x) => x.assigned_session_id === existing.id)) {
+            await sbDelete('assignments', a.id);
+          }
+          await sbDelete('sessions', existing.id);
+          close();
+          await reload();
+          toast('Aula excluida.');
+        } catch (e) { toast(e.message || 'Falha ao excluir', true); }
+      },
+    }, ic.trash()));
+  }
+
+  async function save() {
+    busy(saveBtn, true);
+    try {
+      let sess = existing;
+      if (sess) {
+        sess = await sbUpdate('sessions', sess.id,
+          { session_date: state.date, status: state.status, notes: state.notes || null });
+      } else {
+        sess = await sbInsert('sessions',
+          { student_id: sid, session_date: state.date, status: state.status, notes: state.notes || null });
+      }
+
+      if (state.status === 'realizada') {
+        for (const a of toReview) {
+          const r = results.get(a.id) || 'pendente';
+          if (r === 'pendente') {
+            if (a.result !== 'pendente') {
+              await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
+            }
+          } else {
+            await sbUpdate('assignments', a.id, { result: r, review_session_id: sess.id, reviewed_on: state.date });
+          }
+        }
+        for (const it of nextItems) {
+          if (it.id) continue;
+          await sbInsert('assignments', {
+            student_id: sid, book_id: it.book_id, lesson_no: it.lesson_no,
+            lesson_label: it.lesson_label || null, assigned_session_id: sess.id,
+            assigned_on: state.date, result: 'pendente',
+            attempt_no: attemptsFor(sid, it.book_id, it.lesson_no) + 1,
+          });
+        }
+      } else if (existing) {
+        /* Aula deixou de ser "realizada": o que foi conferido nela volta a pendente. */
+        for (const a of DB.assignments.filter((x) => x.review_session_id === existing.id)) {
+          await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
+        }
+      }
+      for (const id of removedIds) await sbDelete('assignments', id);
+
+      close();
+      await reload();
+      toast('Aula registrada.');
+    } catch (e) {
+      toast(e.message || 'Falha ao salvar', true);
+      busy(saveBtn, false);
+    }
+  }
+
+  drawBody();
+  const close = openSheet({
+    title: (existing ? 'Editar aula - ' : 'Registrar aula - ') + st.name,
+    body: bodyWrap,
+    footer,
+  });
+}
+
+/* ==========================================================================
+   12. SHEETS: ALUNO, STATUS, MATRICULA, LIVRO
+   ========================================================================== */
+function sheetStudent(st) {
+  const isNew = !st;
+  const f = {
+    name: st ? st.name : '',
+    start_date: st ? st.start_date : todayISO(),
+    weekday: st && st.weekday != null ? String(st.weekday) : '',
+    class_time: st && st.class_time ? fmtTime(st.class_time) : '',
+    contact: st ? (st.contact || '') : '',
+    notes: st ? (st.notes || '') : '',
+  };
+  const saveBtn = h('button', { class: 'btn primary', onclick: save }, isNew ? 'Cadastrar' : 'Salvar');
+
+  const body = h('div', {},
+    field('Nome', h('input', { type: 'text', value: f.name, placeholder: 'Nome do aluno', oninput: (e) => { f.name = e.target.value; } })),
+    h('div', { class: 'grid2' },
+      field('Inicio', h('input', { type: 'date', value: f.start_date, onchange: (e) => { f.start_date = e.target.value; } })),
+      field('Horario', h('input', { type: 'time', value: f.class_time, onchange: (e) => { f.class_time = e.target.value; } }))),
+    field('Dia da aula', h('select', { onchange: (e) => { f.weekday = e.target.value; } },
+      h('option', { value: '', selected: f.weekday === '' }, 'Sem dia definido'),
+      WD.map((d, i) => h('option', { value: String(i), selected: f.weekday === String(i) }, d)))),
+    field('Contato', h('input', { type: 'text', value: f.contact, placeholder: 'Telefone, e-mail, responsavel...', oninput: (e) => { f.contact = e.target.value; } })),
+    field('Observacoes', h('textarea', { value: f.notes, oninput: (e) => { f.notes = e.target.value; } })),
+    isNew ? null : h('button', {
+      class: 'btn danger block', onclick: async () => {
+        if (!await confirmSheet('Excluir aluno?',
+          'Todas as aulas, licoes e livros de ' + st.name + ' serao apagados. Nao da para desfazer.',
+          'Excluir tudo')) return;
+        try { await sbDelete('students', st.id); close(); location.hash = '#/alunos'; await reload(); toast('Aluno excluido.'); }
+        catch (e) { toast(e.message || 'Falha ao excluir', true); }
+      },
+    }, 'Excluir aluno'));
+
+  async function save() {
+    if (!f.name.trim()) return toast('Informe o nome.', true);
+    busy(saveBtn, true);
+    const row = {
+      name: f.name.trim(),
+      start_date: f.start_date || todayISO(),
+      weekday: f.weekday === '' ? null : Number(f.weekday),
+      class_time: f.class_time || null,
+      contact: f.contact.trim() || null,
+      notes: f.notes.trim() || null,
+    };
+    try {
+      if (isNew) await sbInsert('students', row);
+      else await sbUpdate('students', st.id, row);
+      close();
+      await reload();
+      toast(isNew ? 'Aluno cadastrado.' : 'Aluno atualizado.');
+    } catch (e) { toast(e.message || 'Falha ao salvar', true); busy(saveBtn, false); }
+  }
+  const close = openSheet({
+    title: isNew ? 'Novo aluno' : 'Editar aluno',
+    body,
+    footer: [h('button', { class: 'btn', onclick: () => close() }, 'Cancelar'), saveBtn],
+  });
+}
+
+function sheetStatus(st) {
+  const f = {
+    status: st.status,
+    stopped_on: st.stopped_on || todayISO(),
+    stop_reason: st.stop_reason || '',
+  };
+  const extra = h('div', {});
+  function drawExtra() {
+    extra.textContent = '';
+    if (f.status !== 'parou') return;
+    append(extra, [
+      field('Data em que parou', h('input', {
+        type: 'date', value: f.stopped_on, onchange: (e) => { f.stopped_on = e.target.value; },
+      })),
+      field('Motivo', h('input', {
+        type: 'text', value: f.stop_reason, placeholder: 'Opcional',
+        oninput: (e) => { f.stop_reason = e.target.value; },
+      })),
+    ]);
+  }
+  drawExtra();
+  const saveBtn = h('button', { class: 'btn primary', onclick: save }, 'Salvar');
+  const body = h('div', {},
+    field('Situacao do aluno', segmented(
+      [['ativo', 'Ativo'], ['pausado', 'Pausado'], ['parou', 'Parou']],
+      f.status, (v) => { f.status = v; drawExtra(); })),
+    extra,
+    h('p', { class: 'tiny muted' },
+      'Pausado sai da lista de aulas mas volta depois. Parou registra a data de saida e mantem todo o historico.'));
+
+  async function save() {
+    busy(saveBtn, true);
+    try {
+      await sbUpdate('students', st.id, {
+        status: f.status,
+        stopped_on: f.status === 'parou' ? (f.stopped_on || todayISO()) : null,
+        stop_reason: f.status === 'parou' ? (f.stop_reason.trim() || null) : null,
+      });
+      close();
+      await reload();
+      toast('Situacao atualizada.');
+    } catch (e) { toast(e.message || 'Falha ao salvar', true); busy(saveBtn, false); }
+  }
+  const close = openSheet({
+    title: 'Situacao - ' + st.name,
+    body,
+    footer: [h('button', { class: 'btn', onclick: () => close() }, 'Cancelar'), saveBtn],
+  });
+}
+
+function sheetEnroll(sid) {
+  const used = new Set(studentEnrollments(sid).map((e) => e.book_id));
+  const avail = DB.books.filter((b) => !used.has(b.id));
+  if (!DB.books.length) {
+    let dismiss;
+    dismiss = openSheet({
+      title: 'Adicionar livro',
+      body: emptyState('Nenhum livro cadastrado', 'Cadastre os livros na aba Livros primeiro.',
+        h('a', { class: 'btn primary sm', href: '#/livros', onclick: () => dismiss() }, 'Ir para Livros')),
+    });
+    return;
+  }
+  if (!avail.length) {
+    openSheet({
+      title: 'Adicionar livro',
+      body: emptyState('Todos ja vinculados', 'Este aluno ja esta em todos os livros cadastrados.'),
+    });
+    return;
+  }
+  let bid = avail[0].id;
+  let started = todayISO();
+  const saveBtn = h('button', { class: 'btn primary', onclick: save }, 'Adicionar');
+  const body = h('div', {},
+    field('Livro', h('select', { onchange: (e) => { bid = e.target.value; } },
+      avail.map((b) => h('option', { value: b.id }, b.title + ' (' + b.lesson_count + ' licoes)')))),
+    field('Comecou em', h('input', { type: 'date', value: started, onchange: (e) => { started = e.target.value; } })));
+
+  async function save() {
+    busy(saveBtn, true);
+    try {
+      await sbInsert('enrollments', { student_id: sid, book_id: bid, started_on: started || todayISO(), active: true });
+      close();
+      await reload();
+      toast('Livro adicionado.');
+    } catch (e) { toast(e.message || 'Falha ao salvar', true); busy(saveBtn, false); }
+  }
+  const close = openSheet({
+    title: 'Adicionar livro',
+    body,
+    footer: [h('button', { class: 'btn', onclick: () => close() }, 'Cancelar'), saveBtn],
+  });
+}
+
+async function toggleEnroll(en) {
+  try { await sbUpdate('enrollments', en.id, { active: !en.active }); await reload(); }
+  catch (e) { toast(e.message || 'Falha ao salvar', true); }
+}
+async function removeEnroll(en) {
+  if (!await confirmSheet('Remover livro?',
+    'O vinculo com "' + bookTitle(en.book_id) + '" sai da ficha. As licoes ja registradas continuam no historico.',
+    'Remover')) return;
+  try { await sbDelete('enrollments', en.id); await reload(); toast('Livro removido.'); }
+  catch (e) { toast(e.message || 'Falha ao remover', true); }
+}
+
+function sheetBook(bk) {
+  const isNew = !bk;
+  const f = {
+    title: bk ? bk.title : '',
+    level: bk ? (bk.level || '') : '',
+    lesson_count: bk ? bk.lesson_count : 12,
+  };
+  const saveBtn = h('button', { class: 'btn primary', onclick: save }, isNew ? 'Cadastrar' : 'Salvar');
+  const body = h('div', {},
+    field('Titulo', h('input', { type: 'text', value: f.title, placeholder: 'Nome do livro', oninput: (e) => { f.title = e.target.value; } })),
+    h('div', { class: 'grid2' },
+      field('Nivel', h('input', { type: 'text', value: f.level, placeholder: 'Ex: A1, Book 2', oninput: (e) => { f.level = e.target.value; } })),
+      field('N. de licoes', h('input', {
+        type: 'number', min: 1, max: 300, inputmode: 'numeric', value: f.lesson_count,
+        oninput: (e) => { f.lesson_count = e.target.value; },
+      }))),
+    isNew ? null : h('button', {
+      class: 'btn danger block', onclick: async () => {
+        const inUse = DB.enrollments.filter((e) => e.book_id === bk.id).length;
+        if (!await confirmSheet('Excluir livro?',
+          inUse ? 'O livro esta em ' + plural(inUse, 'aluno', 'alunos') + '. As licoes registradas dele tambem serao apagadas.'
+                : 'O livro sera removido.',
+          'Excluir')) return;
+        try { await sbDelete('books', bk.id); close(); await reload(); toast('Livro excluido.'); }
+        catch (e) { toast(e.message || 'Falha ao excluir', true); }
+      },
+    }, 'Excluir livro'));
+
+  async function save() {
+    const n = parseInt(f.lesson_count, 10);
+    if (!f.title.trim()) return toast('Informe o titulo.', true);
+    if (!n || n < 1 || n > 300) return toast('Numero de licoes entre 1 e 300.', true);
+    busy(saveBtn, true);
+    const row = { title: f.title.trim(), level: f.level.trim() || null, lesson_count: n };
+    try {
+      if (isNew) await sbInsert('books', row);
+      else await sbUpdate('books', bk.id, row);
+      close();
+      await reload();
+      toast(isNew ? 'Livro cadastrado.' : 'Livro atualizado.');
+    } catch (e) { toast(e.message || 'Falha ao salvar', true); busy(saveBtn, false); }
+  }
+  const close = openSheet({
+    title: isNew ? 'Novo livro' : 'Editar livro',
+    body,
+    footer: [h('button', { class: 'btn', onclick: () => close() }, 'Cancelar'), saveBtn],
+  });
+}
+
+/* ==========================================================================
+   13. TELA: LIVROS
+   ========================================================================== */
+function viewLivros() {
+  setTopbar('Livros', plural(DB.books.length, 'livro', 'livros'), {
+    action: h('button', { class: 'icon-btn', 'aria-label': 'Novo livro', onclick: () => sheetBook(null) }, ic.plus()),
+  });
+  if (!DB.books.length) {
+    return h('div', { class: 'section' }, emptyState('Nenhum livro',
+      'Cadastre os livros usados nas aulas. Cada livro tem um numero de licoes.',
+      h('button', { class: 'btn primary sm', onclick: () => sheetBook(null) }, 'Novo livro')));
+  }
+  return h('div', { class: 'section' }, DB.books.map((b) => {
+    const users = DB.enrollments.filter((e) => e.book_id === b.id && e.active).length;
+    return h('button', { class: 'tap', onclick: () => sheetBook(b) },
+      h('div', { class: 'row' },
+        h('div', { class: 'grow' },
+          h('div', { class: 'ellip', style: 'font-weight:650' }, b.title),
+          h('div', { class: 'tiny muted' },
+            (b.level ? b.level + ' - ' : '') + plural(b.lesson_count, 'licao', 'licoes'))),
+        users ? badge(plural(users, 'aluno', 'alunos'), 'info') : badge('sem alunos')));
+  }));
+}
+
+/* ==========================================================================
+   14. TELA: RELATORIOS
+   ========================================================================== */
+function viewRelatorios() {
+  setTopbar('Relatorios', 'Ultimos 90 dias');
+  const since = addDays(todayISO(), -90);
+  const recent = DB.sessions.filter((s) => s.session_date >= since);
+  const count = (st) => recent.filter((s) => s.status === st).length;
+
+  const byStudent = DB.students.map((st) => {
+    const ss = recent.filter((x) => x.student_id === st.id);
+    const as = DB.assignments.filter((a) => a.student_id === st.id && a.reviewed_on && a.reviewed_on >= since);
+    const ok = as.filter((a) => a.result === 'aprovado').length;
+    const bad = as.filter((a) => a.result === 'reprovado').length;
+    return {
+      st,
+      aulas: ss.filter((x) => x.status === 'realizada').length,
+      faltas: ss.filter((x) => x.status === 'falta_aluno').length,
+      ok, bad,
+      taxa: ok + bad ? Math.round((ok / (ok + bad)) * 100) : null,
+    };
+  });
+
+  /* Licoes mais reprovadas no geral (livro + licao) */
+  const failMap = new Map();
+  for (const a of DB.assignments) {
+    if (a.result !== 'reprovado') continue;
+    const k = a.book_id + '#' + a.lesson_no;
+    const cur = failMap.get(k) || { book_id: a.book_id, lesson_no: a.lesson_no, count: 0, students: new Set() };
+    cur.count++;
+    cur.students.add(a.student_id);
+    failMap.set(k, cur);
+  }
+  const topFails = [...failMap.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+
+  /* Alunos travados: mesma licao reprovada 2 ou mais vezes */
+  const stuck = [];
+  for (const st of DB.students.filter((s) => s.status === 'ativo')) {
+    for (const f of failuresOf(st.id)) if (f.count >= 2) stuck.push({ st, ...f });
+  }
+  stuck.sort((a, b) => b.count - a.count);
+
+  const faltosos = byStudent.filter((r) => r.faltas > 0).sort((a, b) => b.faltas - a.faltas);
+
+  return h('div', {},
+    h('div', { class: 'section' },
+      h('div', { class: 'kpi' },
+        h('div', {}, h('b', {}, count('realizada')), h('span', {}, 'aulas dadas')),
+        h('div', {}, h('b', {}, count('falta_aluno')), h('span', {}, 'faltas')),
+        h('div', {}, h('b', {}, count('cancelada')), h('span', {}, 'canceladas')),
+        h('div', {}, h('b', {}, count('sem_aula')), h('span', {}, 'sem aula')))),
+
+    h('div', { class: 'section' },
+      h('div', { class: 'kpi' },
+        h('div', {}, h('b', {}, DB.students.filter((s) => s.status === 'ativo').length), h('span', {}, 'ativos')),
+        h('div', {}, h('b', {}, DB.students.filter((s) => s.status === 'pausado').length), h('span', {}, 'pausados')),
+        h('div', {}, h('b', {}, DB.students.filter((s) => s.status === 'parou').length), h('span', {}, 'pararam')),
+        h('div', {}, h('b', {}, DB.assignments.filter((a) => a.result === 'pendente').length), h('span', {}, 'pendentes')))),
+
+    stuck.length
+      ? h('div', { class: 'section' },
+          sectionHead('Atencao: alunos travados'),
+          h('div', { class: 'card' }, stuck.slice(0, 10).map((s) => h('div', { class: 'item' },
+            h('div', { class: 'row' },
+              h('div', { class: 'grow' },
+                h('a', { href: '#/aluno/' + s.st.id, style: 'font-weight:600;text-decoration:none;color:inherit' }, s.st.name),
+                h('div', { class: 'tiny muted ellip' }, 'Licao ' + s.lesson_no + ' - ' + bookTitle(s.book_id))),
+              badge(s.count + 'x reprovado', 'bad'))))))
+      : null,
+
+    h('div', { class: 'section' },
+      sectionHead('Desempenho por aluno'),
+      byStudent.length
+        ? h('div', { class: 'card' }, byStudent
+            .sort((a, b) => (b.taxa ?? -1) - (a.taxa ?? -1))
+            .map((r) => h('div', { class: 'item' },
+              h('div', { class: 'row' },
+                h('div', { class: 'grow' },
+                  h('a', { href: '#/aluno/' + r.st.id, style: 'font-weight:600;text-decoration:none;color:inherit' }, r.st.name),
+                  h('div', { class: 'tiny muted' },
+                    r.aulas + ' aulas, ' + r.faltas + ' faltas, ' + r.ok + ' aprovadas, ' + r.bad + ' reprovadas')),
+                r.taxa == null ? badge('sem dados')
+                  : badge(r.taxa + '% aprov.', r.taxa >= 80 ? 'ok' : r.taxa >= 50 ? 'warn' : 'bad')))))
+        : emptyState('Sem alunos', 'Cadastre alunos para ver o desempenho.')),
+
+    topFails.length
+      ? h('div', { class: 'section' },
+          sectionHead('Licoes que mais reprovam'),
+          h('div', { class: 'card' }, topFails.map((f) => h('div', { class: 'item' },
+            h('div', { class: 'row' },
+              h('div', { class: 'grow' },
+                h('div', { style: 'font-weight:600' }, 'Licao ' + f.lesson_no),
+                h('div', { class: 'tiny muted ellip' }, bookTitle(f.book_id) + ' - ' + plural(f.students.size, 'aluno', 'alunos'))),
+              badge(f.count + 'x', 'bad'))))))
+      : null,
+
+    faltosos.length
+      ? h('div', { class: 'section' },
+          sectionHead('Faltas por aluno'),
+          h('div', { class: 'card' }, faltosos.map((r) => h('div', { class: 'item' },
+            h('div', { class: 'row' },
+              h('div', { class: 'grow ellip' }, r.st.name),
+              badge(plural(r.faltas, 'falta', 'faltas'), r.faltas > 2 ? 'bad' : 'warn'))))))
+      : null);
+}
+
+/* ==========================================================================
+   15. TELA: CONFIGURACOES
+   ========================================================================== */
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
+
+function viewConfig() {
+  setTopbar('Configuracoes', SESS && SESS.email ? SESS.email : '');
+  const theme = store.get(K_THEME, 'auto');
+  const maskedKey = CFG ? String(CFG.key).slice(0, 8) + '...' + String(CFG.key).slice(-4) : '';
+
+  return h('div', {},
+    h('div', { class: 'section' },
+      sectionHead('Conexao'),
+      h('div', { class: 'card' },
+        h('div', { class: 'small' }, h('b', {}, 'Projeto: '), apiBase().replace(/^https?:\/\//, '')),
+        h('div', { class: 'small muted', style: 'margin-top:4px' }, 'Chave: ' + maskedKey),
+        h('div', { class: 'wrap', style: 'margin-top:12px' },
+          h('button', { class: 'btn sm', onclick: refreshNow }, 'Atualizar dados'),
+          h('button', {
+            class: 'btn sm', onclick: () => { CFG = null; store.del(K_CFG); render(); },
+          }, 'Trocar conexao'),
+          h('button', {
+            class: 'btn sm danger', onclick: async () => {
+              if (!await confirmSheet('Sair da conta?', 'Os dados no servidor continuam intactos.', 'Sair')) return;
+              signOut(); render();
+            },
+          }, 'Sair')))),
+
+    h('div', { class: 'section' },
+      sectionHead('Aparencia'),
+      h('div', { class: 'card' },
+        segmented([['auto', 'Automatico'], ['light', 'Claro'], ['dark', 'Escuro']], theme, (v) => {
+          store.set(K_THEME, v);
+          applyTheme();
+        }))),
+
+    h('div', { class: 'section' },
+      sectionHead('Backup'),
+      h('div', { class: 'card' },
+        h('p', { class: 'small muted' },
+          'O backup baixa um JSON com tudo: alunos, livros, aulas e licoes. A restauracao insere os registros como novos.'),
+        h('div', { class: 'wrap', style: 'margin-top:12px' },
+          h('button', { class: 'btn sm', onclick: exportJson }, 'Baixar backup'),
+          h('button', { class: 'btn sm', onclick: importJson }, 'Restaurar backup')))),
+
+    installPrompt
+      ? h('div', { class: 'section' },
+          sectionHead('Instalar no celular'),
+          h('div', { class: 'card' },
+            h('p', { class: 'small muted' }, 'Instale como aplicativo para abrir sem barra de navegador.'),
+            h('button', {
+              class: 'btn primary sm', style: 'margin-top:12px',
+              onclick: async () => { const p = installPrompt; installPrompt = null; await p.prompt(); render(); },
+            }, 'Instalar aplicativo')))
+      : null,
+
+    h('div', { class: 'section' },
+      sectionHead('Sobre'),
+      h('div', { class: 'card small muted' },
+        h('div', {}, 'Acompanhamento de Alunos - versao 1.0'),
+        h('div', { style: 'margin-top:4px' },
+          DB.students.length + ' alunos, ' + DB.books.length + ' livros, ' +
+          DB.sessions.length + ' aulas, ' + DB.assignments.length + ' licoes registradas'))));
+}
+
+function exportJson() {
+  const payload = {
+    app: 'acompanhamento-alunos', version: 1, exported_at: new Date().toISOString(),
+    students: DB.students, books: DB.books, enrollments: DB.enrollments,
+    sessions: DB.sessions, assignments: DB.assignments,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: 'backup-alunos-' + todayISO() + '.json' });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast('Backup gerado.');
+}
+
+function importJson() {
+  const input = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); }
+    catch { return toast('Arquivo invalido.', true); }
+    if (data.app !== 'acompanhamento-alunos') return toast('Este JSON nao e um backup deste app.', true);
+    const total = (data.students || []).length + (data.books || []).length +
+                  (data.sessions || []).length + (data.assignments || []).length;
+    if (!await confirmSheet('Restaurar backup?',
+      'Serao inseridos ' + total + ' registros como novos. Nada e apagado - pode gerar duplicatas se os dados ja existirem.',
+      'Restaurar', false)) return;
+    try {
+      await restore(data);
+      await reload();
+      toast('Backup restaurado.');
+    } catch (e) { toast(e.message || 'Falha na restauracao', true); }
+  });
+  document.body.appendChild(input);
+  input.click();
+  setTimeout(() => input.remove(), 1000);
+}
+
+/** Insere os registros remapeando os ids antigos para os novos. */
+async function restore(data) {
+  const mapBook = new Map(), mapStudent = new Map(), mapSession = new Map();
+
+  for (const b of data.books || []) {
+    const n = await sbInsert('books', {
+      title: b.title, level: b.level || null, lesson_count: b.lesson_count || 12,
+    });
+    mapBook.set(b.id, n.id);
+  }
+  for (const s of data.students || []) {
+    const n = await sbInsert('students', {
+      name: s.name, start_date: s.start_date || todayISO(), contact: s.contact || null,
+      weekday: s.weekday == null ? null : s.weekday, class_time: s.class_time || null,
+      status: s.status || 'ativo', stopped_on: s.stopped_on || null,
+      stop_reason: s.stop_reason || null, notes: s.notes || null,
+    });
+    mapStudent.set(s.id, n.id);
+  }
+  for (const e of data.enrollments || []) {
+    if (!mapStudent.has(e.student_id) || !mapBook.has(e.book_id)) continue;
+    await sbInsert('enrollments', {
+      student_id: mapStudent.get(e.student_id), book_id: mapBook.get(e.book_id),
+      started_on: e.started_on, active: e.active,
+    });
+  }
+  for (const s of data.sessions || []) {
+    if (!mapStudent.has(s.student_id)) continue;
+    const n = await sbInsert('sessions', {
+      student_id: mapStudent.get(s.student_id), session_date: s.session_date,
+      status: s.status || 'realizada', notes: s.notes || null,
+    });
+    mapSession.set(s.id, n.id);
+  }
+  for (const a of data.assignments || []) {
+    if (!mapStudent.has(a.student_id) || !mapBook.has(a.book_id)) continue;
+    await sbInsert('assignments', {
+      student_id: mapStudent.get(a.student_id), book_id: mapBook.get(a.book_id),
+      lesson_no: a.lesson_no, lesson_label: a.lesson_label || null,
+      assigned_session_id: mapSession.get(a.assigned_session_id) || null,
+      review_session_id: mapSession.get(a.review_session_id) || null,
+      result: a.result || 'pendente', attempt_no: a.attempt_no || 1,
+      score: a.score == null ? null : a.score,
+      notes: a.notes || null, assigned_on: a.assigned_on || todayISO(),
+      reviewed_on: a.reviewed_on || null,
+    });
+  }
+}
+
+/* ==========================================================================
+   16. TEMA, SERVICE WORKER, ROTEADOR, BOOT
+   ========================================================================== */
+function applyTheme() {
+  const t = store.get(K_THEME, 'auto');
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+}
+
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol === 'file:') return;   // SW nao funciona em file://
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+const ROUTES = [
+  [/^\/hoje$/, () => viewHoje()],
+  [/^\/alunos$/, () => viewAlunos()],
+  [/^\/aluno\/(.+)$/, (m) => viewAluno(m[1])],
+  [/^\/livros$/, () => viewLivros()],
+  [/^\/relatorios$/, () => viewRelatorios()],
+  [/^\/config$/, () => viewConfig()],
+];
+
+function currentTab(path) {
+  if (path.startsWith('/aluno')) return '#/alunos';
+  const hit = TABS.find(([href]) => href === '#' + path);
+  return hit ? hit[0] : '#/hoje';
+}
+
+function render() {
+  setBanner(STALE ? 'Sem conexao com o servidor - mostrando dados salvos no aparelho.' : '');
+  if (!CFG) { document.getElementById('tabbar').hidden = true; return mount(viewSetup()); }
+  if (!SESS) { document.getElementById('tabbar').hidden = true; return mount(viewLogin()); }
+
+  const path = (location.hash || '#/hoje').slice(1) || '/hoje';
+  renderTabbar(currentTab(path));
+  for (const [re, fn] of ROUTES) {
+    const m = path.match(re);
+    if (m) { try { return mount(fn(m)); } catch (e) { console.error(e); return mount(emptyState('Erro na tela', e.message)); } }
+  }
+  location.hash = '#/hoje';
+}
+
+window.addEventListener('hashchange', render);
+
+(async function boot() {
+  applyTheme();
+  registerSW();
+  if (!location.hash) location.hash = '#/hoje';
+  if (!CFG || !SESS) return render();
+  try {
+    await loadAll();
+  } catch (e) {
+    STALE = true;
+    if (String(e.message).includes('Sessao expirada')) return render();
+    toast(e.message || 'Sem conexao', true);
+  }
+  render();
+})();
+</script>

@@ -1,0 +1,14 @@
+# Backups exportados pelo app - contem dados pessoais de alunos, nunca versionar
+backup-alunos-*.json
+
+# Deploy
+.vercel/
+
+# Dependencias e logs (o projeto nao usa, mas evita acidentes)
+node_modules/
+*.log
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store
