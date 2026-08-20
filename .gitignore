@@ -1,11 +1,15 @@
 # Backups exportados pelo app - contem dados pessoais de alunos, nunca versionar
 backup-alunos-*.json
 
-# Deploy
-.vercel/
-
-# Dependencias e logs (o projeto nao usa, mas evita acidentes)
+# Dependencias
 node_modules/
+
+# Vercel: link do projeto e variaveis de ambiente locais
+.vercel/
+.env
+.env.*.local
+
+# Logs
 *.log
 
 # Sistema

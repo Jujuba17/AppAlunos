@@ -1,6 +1,6 @@
 /* Service worker: cache do "app shell" para instalar e abrir offline.
-   Os dados vem do Supabase pela rede e nunca sao cacheados aqui. */
-const CACHE = 'alunos-shell-v1';
+   Os dados vem de /api/data e nunca passam por aqui. */
+const CACHE = 'alunos-shell-v2';
 const SHELL = [
   './',
   './index.html',
@@ -25,8 +25,10 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Nunca intercepta chamadas ao Supabase - dados sempre frescos, nunca em cache.
   if (url.origin !== self.location.origin) return;
+  // Nunca intercepta a API de dados: uma resposta vinda do cache faria o app
+  // achar que leu ou gravou quando nao houve contato com o servidor.
+  if (url.pathname.startsWith('/api/')) return;
 
   e.respondWith(
     fetch(req)

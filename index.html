@@ -314,13 +314,13 @@ hr.sep { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
 
 /* ==========================================================================
    1. CONFIGURACAO
-   Opcional: preencha BUILTIN antes do deploy na Vercel para nao precisar
-   digitar a conexao em cada aparelho. A anon key do Supabase e publica por
-   design - a seguranca vem do login + RLS (veja schema.sql).
+   Nao existe banco de dados. Todos os dados vivem num unico JSON privado
+   guardado no Vercel Blob, lido e regravado inteiro por /api/data.
+   O unico segredo que este aparelho guarda e a senha de acesso.
    ========================================================================== */
-const BUILTIN = { url: '', key: '' };
+const API = '/api/data';
 
-const K_CFG = 'aa.cfg', K_SESS = 'aa.sess', K_CACHE = 'aa.cache', K_THEME = 'aa.theme';
+const K_SENHA = 'aa.senha', K_CACHE = 'aa.cache', K_THEME = 'aa.theme';
 
 const WD = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado'];
 const WD_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
@@ -465,121 +465,169 @@ function busy(btn, on) {
 }
 
 /* ==========================================================================
-   3. CAMADA SUPABASE (REST puro, zero dependencias)
+   3. ESTADO E PERSISTENCIA
+   O documento inteiro fica em memoria (DB). As alteracoes acontecem primeiro
+   na memoria e depois sao enviadas de uma vez para /api/data, que regrava o
+   JSON no Vercel Blob. ETAG identifica a versao que este aparelho leu: se
+   outro aparelho gravou nesse meio-tempo, o envio volta 409 em vez de
+   sobrescrever, e o app pergunta o que fazer.
    ========================================================================== */
-let CFG = store.get(K_CFG, null) || (BUILTIN.url && BUILTIN.key ? { ...BUILTIN } : null);
-let SESS = store.get(K_SESS, null);
+const TABELAS = ['students', 'books', 'enrollments', 'sessions', 'assignments'];
+const emptyDB = () => ({ students: [], books: [], enrollments: [], sessions: [], assignments: [] });
 
-const apiBase = () => String(CFG.url).replace(/\/+$/, '');
+let SENHA = store.get(K_SENHA, null);
+let DB = emptyDB();
+let ETAG = null;
+let STALE = false;      // mostrando dados do cache, sem contato com o servidor
+let PENDENTE = false;   // ha alteracoes locais ainda nao enviadas
 
-async function errMsg(res) {
+function ordenar(d) {
+  const txt = (v) => String(v == null ? '' : v);
+  d.students.sort((a, b) => txt(a.name).localeCompare(txt(b.name)));
+  d.books.sort((a, b) => txt(a.title).localeCompare(txt(b.title)));
+  d.enrollments.sort((a, b) => txt(a.started_on).localeCompare(txt(b.started_on)));
+  d.sessions.sort((a, b) => txt(b.session_date).localeCompare(txt(a.session_date)));
+  d.assignments.sort((a, b) => txt(a.assigned_on).localeCompare(txt(b.assigned_on)));
+  return d;
+}
+function normalizar(bruto) {
+  const d = emptyDB();
+  for (const t of TABELAS) if (bruto && Array.isArray(bruto[t])) d[t] = bruto[t];
+  return ordenar(d);
+}
+function salvarCache() {
+  store.set(K_CACHE, { etag: ETAG, pendente: PENDENTE, data: DB });
+}
+function lerCache() {
+  const c = store.get(K_CACHE, null);
+  if (!c) return;
+  if (c.data) { DB = normalizar(c.data); ETAG = c.etag || null; PENDENTE = !!c.pendente; }
+  else DB = normalizar(c);   // formato antigo, so os dados
+}
+lerCache();
+
+/* --- conversa com /api/data --- */
+async function api(metodo, corpo) {
+  let res;
   try {
-    const j = await res.json();
-    return j.message || j.error_description || j.msg || j.hint || ('HTTP ' + res.status);
-  } catch { return 'HTTP ' + res.status; }
-}
-
-async function authFetch(path, init = {}, retry = true) {
-  const headers = Object.assign(
-    { apikey: CFG.key, 'Content-Type': 'application/json' },
-    init.headers || {});
-  if (SESS && SESS.access_token) headers.Authorization = 'Bearer ' + SESS.access_token;
-  const res = await fetch(apiBase() + path, { ...init, headers });
-  if (res.status === 401 && retry && SESS && SESS.refresh_token) {
-    if (await refreshToken()) return authFetch(path, init, false);
-    signOut();
-    throw new Error('Sessao expirada. Entre novamente.');
-  }
-  return res;
-}
-function saveSession(j) {
-  SESS = {
-    access_token: j.access_token,
-    refresh_token: j.refresh_token,
-    email: (j.user && j.user.email) || (SESS && SESS.email) || '',
-  };
-  store.set(K_SESS, SESS);
-}
-async function signIn(email, password) {
-  const res = await fetch(apiBase() + '/auth/v1/token?grant_type=password', {
-    method: 'POST',
-    headers: { apikey: CFG.key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) throw new Error(await errMsg(res));
-  saveSession(await res.json());
-}
-async function refreshToken() {
-  try {
-    const res = await fetch(apiBase() + '/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST',
-      headers: { apikey: CFG.key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: SESS.refresh_token }),
+    res = await fetch(API, {
+      method: metodo,
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'x-app-senha': SENHA || '' },
+      body: corpo ? JSON.stringify(corpo) : undefined,
     });
-    if (!res.ok) return false;
-    saveSession(await res.json());
-    return true;
-  } catch { return false; }
+  } catch {
+    const e = new Error('Sem conexao com o servidor.');
+    e.offline = true;
+    throw e;
+  }
+  let j = null;
+  try { j = await res.json(); } catch {}
+  if (!res.ok) {
+    const e = new Error((j && j.erro) || ('Erro HTTP ' + res.status));
+    e.status = res.status;
+    throw e;
+  }
+  return j || {};
 }
-function signOut() {
-  SESS = null;
-  store.del(K_SESS);
-  store.del(K_CACHE);
-  DB = emptyDB();
+async function carregar() {
+  const r = await api('GET');
+  ETAG = r.etag || null;
+  DB = normalizar(r.data);
+  STALE = false;
+  PENDENTE = false;
+  salvarCache();
+}
+async function enviar() {
+  const r = await api('PUT', { etag: ETAG, data: DB });
+  ETAG = r.etag || null;
+  STALE = false;
+  PENDENTE = false;
+  salvarCache();
 }
 
-async function sbSelect(table, order) {
-  const q = new URLSearchParams({ select: '*', limit: '2000' });
-  if (order) q.set('order', order);
-  const res = await authFetch('/rest/v1/' + table + '?' + q);
-  if (!res.ok) throw new Error(await errMsg(res));
-  return res.json();
-}
-async function sbInsert(table, row) {
-  const res = await authFetch('/rest/v1/' + table, {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(row),
-  });
-  if (!res.ok) throw new Error(await errMsg(res));
-  const j = await res.json();
-  return Array.isArray(j) ? j[0] : j;
-}
-async function sbUpdate(table, id, patch) {
-  const res = await authFetch('/rest/v1/' + table + '?id=eq.' + id, {
-    method: 'PATCH',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) throw new Error(await errMsg(res));
-  const j = await res.json();
-  return Array.isArray(j) ? j[0] : j;
-}
-async function sbDelete(table, id) {
-  const res = await authFetch('/rest/v1/' + table + '?id=eq.' + id, { method: 'DELETE' });
-  if (!res.ok) throw new Error(await errMsg(res));
+/* --- gravacao: altera a memoria e envia; nunca perde o dado em caso de falha --- */
+async function reload() {
+  ordenar(DB);
+  PENDENTE = true;
+  salvarCache();
+  try {
+    await enviar();
+  } catch (e) {
+    if (e.status === 409) { render(); return sheetConflito(); }
+    if (e.status === 401) { SENHA = null; store.del(K_SENHA); render(); return toast('Senha recusada. Entre novamente.', true); }
+    STALE = !!e.offline;
+    toast(e.message + ' As alteracoes ficaram guardadas neste aparelho.', true);
+  }
+  render();
 }
 
 /* ==========================================================================
-   4. ESTADO E REGRAS DE NEGOCIO
+   4. REGISTROS: ID, VALORES PADRAO, EXCLUSAO EM CASCATA
+   O que antes o banco fazia (chave, defaults, cascata) acontece aqui.
+   Os nomes sbInsert/sbUpdate/sbDelete foram mantidos: agora sao locais.
    ========================================================================== */
-const emptyDB = () => ({ students: [], books: [], enrollments: [], sessions: [], assignments: [] });
-let DB = store.get(K_CACHE, null) || emptyDB();
-let STALE = false;
-
-async function loadAll() {
-  const [students, books, enrollments, sessions, assignments] = await Promise.all([
-    sbSelect('students', 'name.asc'),
-    sbSelect('books', 'title.asc'),
-    sbSelect('enrollments', 'started_on.asc'),
-    sbSelect('sessions', 'session_date.desc'),
-    sbSelect('assignments', 'assigned_on.asc'),
-  ]);
-  DB = { students, books, enrollments, sessions, assignments };
-  store.set(K_CACHE, DB);
-  STALE = false;
+function novoId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
-async function reload() { await loadAll(); render(); }
+const PADROES = {
+  students: () => ({
+    name: '', start_date: todayISO(), contact: null, weekday: null, class_time: null,
+    status: 'ativo', stopped_on: null, stop_reason: null, notes: null,
+  }),
+  books: () => ({ title: '', level: null, lesson_count: 12 }),
+  enrollments: () => ({ started_on: todayISO(), active: true }),
+  sessions: () => ({ status: 'realizada', notes: null }),
+  assignments: () => ({
+    lesson_label: null, assigned_session_id: null, review_session_id: null,
+    result: 'pendente', attempt_no: 1, score: null, notes: null,
+    assigned_on: todayISO(), reviewed_on: null,
+  }),
+};
+
+/** Uma aula por aluno por dia - era a restricao unique do banco. */
+function checarAulaUnica(studentId, data, ignorarId) {
+  const bate = DB.sessions.find((s) =>
+    s.student_id === studentId && s.session_date === data && s.id !== ignorarId);
+  if (bate) throw new Error('Ja existe uma aula registrada para este aluno em ' + fmtDate(data) + '.');
+}
+
+async function sbInsert(table, row) {
+  const linha = Object.assign({ id: novoId() }, PADROES[table] ? PADROES[table]() : {}, row);
+  linha.created_at = new Date().toISOString();
+  if (table === 'sessions') checarAulaUnica(linha.student_id, linha.session_date);
+  DB[table].push(linha);
+  return linha;
+}
+async function sbUpdate(table, id, patch) {
+  const linha = DB[table].find((x) => x.id === id);
+  if (!linha) throw new Error('Registro nao encontrado - recarregue o app.');
+  if (table === 'sessions') {
+    checarAulaUnica(
+      patch.student_id || linha.student_id,
+      patch.session_date || linha.session_date,
+      id);
+  }
+  Object.assign(linha, patch);
+  return linha;
+}
+async function sbDelete(table, id) {
+  DB[table] = DB[table].filter((x) => x.id !== id);
+  if (table === 'students') {
+    for (const t of ['enrollments', 'sessions', 'assignments']) {
+      DB[t] = DB[t].filter((x) => x.student_id !== id);
+    }
+  } else if (table === 'books') {
+    DB.enrollments = DB.enrollments.filter((x) => x.book_id !== id);
+    DB.assignments = DB.assignments.filter((x) => x.book_id !== id);
+  } else if (table === 'sessions') {
+    for (const a of DB.assignments) {
+      if (a.assigned_session_id === id) a.assigned_session_id = null;
+      if (a.review_session_id === id) a.review_session_id = null;
+    }
+  }
+}
 
 const student = (id) => DB.students.find((s) => s.id === id);
 const book = (id) => DB.books.find((b) => b.id === id);
@@ -718,79 +766,83 @@ function mount(node) {
 }
 
 /* ==========================================================================
-   7. TELAS DE ENTRADA (conexao e login)
+   7. TELA DE ENTRADA (senha unica) E RESOLUCAO DE CONFLITO
    ========================================================================== */
-function viewSetup() {
+function viewSenha() {
   document.getElementById('tabbar').hidden = true;
-  setTopbar('Conectar', 'Passo unico por aparelho');
-  let url = (CFG && CFG.url) || '';
-  let key = (CFG && CFG.key) || '';
-  const btn = h('button', { class: 'btn primary block', onclick: save }, 'Salvar conexao');
+  setTopbar('Entrar');
+  let senha = '';
+  const btn = h('button', { class: 'btn primary block', onclick: entrar }, 'Entrar');
+  const form = h('form', { onsubmit: (e) => { e.preventDefault(); entrar(); } },
+    field('Senha do app', h('input', {
+      type: 'password', autocomplete: 'current-password', required: true,
+      placeholder: 'a senha que voce definiu no Vercel',
+      oninput: (e) => { senha = e.target.value; },
+    })),
+    btn);
 
-  async function save() {
-    if (!url.trim() || !key.trim()) return toast('Preencha os dois campos.', true);
-    CFG = { url: url.trim(), key: key.trim() };
-    store.set(K_CFG, CFG);
-    toast('Conexao salva.');
-    render();
+  async function entrar() {
+    if (!senha) return toast('Digite a senha.', true);
+    busy(btn, true);
+    const anterior = SENHA;
+    SENHA = senha;
+    try {
+      await carregar();
+      store.set(K_SENHA, SENHA);
+      toast('Tudo certo.');
+      render();
+    } catch (e) {
+      SENHA = anterior;
+      busy(btn, false);
+      toast(e.message || 'Nao consegui entrar.', true);
+    }
   }
   return h('div', {},
     h('div', { class: 'hero' },
       h('div', { class: 'avatar' }, ic.check()),
       h('h1', {}, 'Acompanhamento de Alunos'),
       h('p', { class: 'muted small', style: 'margin-top:6px' },
-        'Cole os dados do seu projeto Supabase. Ficam salvos apenas neste aparelho.')),
-    h('div', { class: 'card' },
-      field('URL do projeto', h('input', {
-        type: 'url', placeholder: 'https://xxxx.supabase.co', value: url,
-        oninput: (e) => { url = e.target.value; },
-      })),
-      field('Chave anon (public)', h('textarea', {
-        placeholder: 'eyJhbGciOi...', value: key, style: 'min-height:88px;font-size:12px',
-        oninput: (e) => { key = e.target.value; },
-      })),
-      btn,
-      h('p', { class: 'tiny muted', style: 'margin-top:12px' },
-        'Supabase > Project Settings > API. Use a chave "anon public", nunca a "service_role".')));
+        'Uma senha so, a mesma em todos os aparelhos.')),
+    h('div', { class: 'card' }, form),
+    h('p', { class: 'tiny muted', style: 'margin-top:14px;text-align:center' },
+      'A senha e a variavel APP_SENHA do seu projeto na Vercel.'));
 }
 
-function viewLogin() {
-  document.getElementById('tabbar').hidden = true;
-  setTopbar('Entrar', SESS && SESS.email ? SESS.email : apiBase().replace(/^https?:\/\//, ''));
-  let email = '', password = '';
-  const btn = h('button', { class: 'btn primary block', onclick: submit }, 'Entrar');
-  const form = h('form', { onsubmit: (e) => { e.preventDefault(); submit(); } },
-    field('E-mail', h('input', {
-      type: 'email', autocomplete: 'username', required: true,
-      oninput: (e) => { email = e.target.value; },
-    })),
-    field('Senha', h('input', {
-      type: 'password', autocomplete: 'current-password', required: true,
-      oninput: (e) => { password = e.target.value; },
-    })),
-    btn);
-
-  async function submit() {
-    if (!email || !password) return toast('Informe e-mail e senha.', true);
-    busy(btn, true);
-    try {
-      await signIn(email, password);
-      await loadAll();
-      toast('Conectado.');
-      render();
-    } catch (e) {
-      toast(e.message || 'Falha no login', true);
-    } finally { busy(btn, false); }
-  }
-  return h('div', {},
-    h('div', { class: 'hero' },
-      h('div', { class: 'avatar' }, ic.check()),
-      h('h1', {}, 'Acompanhamento de Alunos')),
-    h('div', { class: 'card' }, form),
-    h('button', {
-      class: 'btn ghost block', style: 'margin-top:14px',
-      onclick: () => { CFG = null; store.del(K_CFG); render(); },
-    }, 'Trocar conexao'));
+/** Outro aparelho gravou depois que este leu. Quem decide e voce. */
+function sheetConflito() {
+  const close = openSheet({
+    title: 'Alterado em outro aparelho',
+    body: h('div', {},
+      h('p', { class: 'small' },
+        'Os dados na nuvem mudaram depois que este aparelho carregou. ' +
+        'Para nao apagar o que foi feito no outro aparelho, o envio foi interrompido.'),
+      h('p', { class: 'small muted', style: 'margin-top:10px' },
+        'Suas alteracoes continuam guardadas aqui. Escolha o que fazer:')),
+    footer: [
+      h('button', {
+        class: 'btn', onclick: async () => {
+          close();
+          try {
+            await carregar();
+            render();
+            toast('Recarregado da nuvem.');
+          } catch (e) { toast(e.message || 'Falha ao recarregar', true); }
+        },
+      }, 'Descartar as minhas'),
+      h('button', {
+        class: 'btn primary', onclick: async () => {
+          close();
+          try {
+            const atual = await api('GET');       // pega o ETag novo
+            ETAG = atual.etag || null;
+            await enviar();                       // grava o que esta neste aparelho
+            render();
+            toast('Enviado. As alteracoes do outro aparelho foram substituidas.');
+          } catch (e) { toast(e.message || 'Falha ao enviar', true); }
+        },
+      }, 'Manter as minhas'),
+    ],
+  });
 }
 
 /* ==========================================================================
@@ -870,9 +922,27 @@ function todayCard(st, today) {
       h('a', { class: 'btn', href: '#/aluno/' + st.id }, 'Abrir')));
 }
 
+/** Sincroniza: envia o que estiver pendente e depois traz a versao da nuvem. */
 async function refreshNow() {
-  try { await loadAll(); render(); toast('Atualizado.'); }
-  catch (e) { toast(e.message || 'Falha ao atualizar', true); }
+  try {
+    if (PENDENTE) {
+      try {
+        await enviar();
+        toast('Alteracoes enviadas.');
+      } catch (e) {
+        if (e.status === 409) { render(); return sheetConflito(); }
+        throw e;
+      }
+    }
+    await carregar();
+    render();
+    toast('Atualizado.');
+  } catch (e) {
+    if (e.status === 401) { SENHA = null; store.del(K_SENHA); render(); return toast('Senha recusada.', true); }
+    STALE = !!e.offline;
+    render();
+    toast(e.message || 'Falha ao atualizar', true);
+  }
 }
 
 /* ==========================================================================
@@ -1668,27 +1738,41 @@ let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; });
 
 function viewConfig() {
-  setTopbar('Configuracoes', SESS && SESS.email ? SESS.email : '');
+  setTopbar('Configuracoes');
   const theme = store.get(K_THEME, 'auto');
-  const maskedKey = CFG ? String(CFG.key).slice(0, 8) + '...' + String(CFG.key).slice(-4) : '';
+  const estado = PENDENTE
+    ? { texto: 'Ha alteracoes guardadas neste aparelho que ainda nao subiram.', cor: 'warn' }
+    : STALE
+      ? { texto: 'Sem contato com o servidor. Mostrando a ultima versao carregada.', cor: 'bad' }
+      : { texto: 'Tudo sincronizado com a nuvem.', cor: 'ok' };
 
   return h('div', {},
     h('div', { class: 'section' },
-      sectionHead('Conexao'),
+      sectionHead('Sincronizacao'),
       h('div', { class: 'card' },
-        h('div', { class: 'small' }, h('b', {}, 'Projeto: '), apiBase().replace(/^https?:\/\//, '')),
-        h('div', { class: 'small muted', style: 'margin-top:4px' }, 'Chave: ' + maskedKey),
+        h('div', { class: 'wrap' }, badge(estado.texto, estado.cor)),
+        h('p', { class: 'tiny muted', style: 'margin-top:10px' },
+          'Os dados ficam num arquivo JSON na sua conta da Vercel. Cada aparelho le e ' +
+          'regrava esse arquivo, e o app avisa se dois aparelhos mexerem ao mesmo tempo.'),
         h('div', { class: 'wrap', style: 'margin-top:12px' },
-          h('button', { class: 'btn sm', onclick: refreshNow }, 'Atualizar dados'),
-          h('button', {
-            class: 'btn sm', onclick: () => { CFG = null; store.del(K_CFG); render(); },
-          }, 'Trocar conexao'),
+          h('button', { class: 'btn sm', onclick: refreshNow },
+            PENDENTE ? 'Enviar e atualizar' : 'Atualizar agora'),
           h('button', {
             class: 'btn sm danger', onclick: async () => {
-              if (!await confirmSheet('Sair da conta?', 'Os dados no servidor continuam intactos.', 'Sair')) return;
-              signOut(); render();
+              if (!await confirmSheet('Esquecer a senha neste aparelho?',
+                PENDENTE
+                  ? 'ATENCAO: existem alteracoes que ainda nao subiram e serao perdidas. Envie antes de sair.'
+                  : 'Os dados na nuvem continuam intactos. Voce digita a senha de novo na proxima vez.',
+                'Esquecer')) return;
+              SENHA = null;
+              ETAG = null;
+              PENDENTE = false;
+              DB = emptyDB();
+              store.del(K_SENHA);
+              store.del(K_CACHE);
+              render();
             },
-          }, 'Sair')))),
+          }, 'Esquecer senha')))),
 
     h('div', { class: 'section' },
       sectionHead('Aparencia'),
@@ -1719,9 +1803,19 @@ function viewConfig() {
       : null,
 
     h('div', { class: 'section' },
+      sectionHead('Dados de exemplo'),
+      h('div', { class: 'card' },
+        h('p', { class: 'small muted' },
+          'Preenche o app com alunos ficticios para voce conhecer as telas. ' +
+          'Use so enquanto nao tiver dados de verdade.'),
+        h('div', { class: 'wrap', style: 'margin-top:12px' },
+          h('button', { class: 'btn sm', onclick: carregarExemplo }, 'Carregar exemplo'),
+          h('button', { class: 'btn sm danger', onclick: apagarTudo }, 'Apagar tudo')))),
+
+    h('div', { class: 'section' },
       sectionHead('Sobre'),
       h('div', { class: 'card small muted' },
-        h('div', {}, 'Acompanhamento de Alunos - versao 1.0'),
+        h('div', {}, 'Acompanhamento de Alunos - versao 2.0'),
         h('div', { style: 'margin-top:4px' },
           DB.students.length + ' alunos, ' + DB.books.length + ' livros, ' +
           DB.sessions.length + ' aulas, ' + DB.assignments.length + ' licoes registradas'))));
@@ -1818,7 +1912,95 @@ async function restore(data) {
 }
 
 /* ==========================================================================
-   16. TEMA, SERVICE WORKER, ROTEADOR, BOOT
+   16. DADOS DE EXEMPLO
+   ========================================================================== */
+async function carregarExemplo() {
+  if (DB.students.length || DB.books.length) {
+    if (!await confirmSheet('Substituir o que existe?',
+      'Os dados atuais serao apagados e substituidos por alunos ficticios. ' +
+      'Baixe um backup antes se quiser guarda-los.', 'Substituir')) return;
+  }
+  DB = emptyDB();
+  const hoje = todayISO();
+  const dow = parseISO(hoje).getDay();
+  const dia = (n) => addDays(hoje, n);
+
+  const b1 = await sbInsert('books', { title: 'Interchange 1', level: 'A1', lesson_count: 16 });
+  const b2 = await sbInsert('books', { title: 'Grammar in Use', level: 'Basic', lesson_count: 20 });
+  const b3 = await sbInsert('books', { title: 'Reading Practice', level: 'A2', lesson_count: 10 });
+
+  const ana = await sbInsert('students', {
+    name: 'Ana Paula Souza', start_date: '2026-02-10', contact: '11 98888-1111',
+    weekday: dow, class_time: '19:00', notes: 'Prefere exercicios escritos.',
+  });
+  const camila = await sbInsert('students', {
+    name: 'Camila Ferreira', start_date: '2026-04-22', contact: '11 97777-2222',
+    weekday: dow, class_time: '20:30',
+  });
+  const bruno = await sbInsert('students', {
+    name: 'Bruno Lima', start_date: '2026-05-04',
+    weekday: (dow + 2) % 7, class_time: '18:00', notes: 'Usa tres livros ao mesmo tempo.',
+  });
+  await sbInsert('students', {
+    name: 'Diego Santos', start_date: '2026-03-15', contact: '11 96666-3333',
+    weekday: (dow + 6) % 7, class_time: '17:00', status: 'pausado',
+    notes: 'Pausou por causa do trabalho.',
+  });
+  const elisa = await sbInsert('students', {
+    name: 'Elisa Rocha', start_date: '2025-09-01', weekday: (dow + 1) % 7, class_time: '19:30',
+    status: 'parou', stopped_on: '2026-06-30', stop_reason: 'Mudou de cidade',
+  });
+
+  await sbInsert('enrollments', { student_id: ana.id, book_id: b1.id, started_on: '2026-02-10' });
+  await sbInsert('enrollments', { student_id: camila.id, book_id: b2.id, started_on: '2026-04-22' });
+  await sbInsert('enrollments', { student_id: bruno.id, book_id: b1.id, started_on: '2026-05-04' });
+  await sbInsert('enrollments', { student_id: bruno.id, book_id: b2.id, started_on: '2026-06-01' });
+  await sbInsert('enrollments', { student_id: bruno.id, book_id: b3.id, started_on: '2026-07-15' });
+  await sbInsert('enrollments', { student_id: elisa.id, book_id: b1.id, started_on: '2025-09-01', active: false });
+
+  /* Ana: quatro aulas, uma falta, e a licao 3 reprovada e reagendada. */
+  const k1 = await sbInsert('sessions', { student_id: ana.id, session_date: dia(-28) });
+  const k2 = await sbInsert('sessions', { student_id: ana.id, session_date: dia(-21) });
+  await sbInsert('sessions', { student_id: ana.id, session_date: dia(-14), status: 'falta_aluno', notes: 'Avisou por mensagem na hora.' });
+  const k4 = await sbInsert('sessions', { student_id: ana.id, session_date: dia(-7), notes: 'Revisamos pronuncia do passado.' });
+
+  await sbInsert('assignments', { student_id: ana.id, book_id: b1.id, lesson_no: 1, review_session_id: k1.id, result: 'aprovado', assigned_on: dia(-35), reviewed_on: dia(-28) });
+  await sbInsert('assignments', { student_id: ana.id, book_id: b1.id, lesson_no: 2, assigned_session_id: k1.id, review_session_id: k2.id, result: 'aprovado', assigned_on: dia(-28), reviewed_on: dia(-21) });
+  await sbInsert('assignments', { student_id: ana.id, book_id: b1.id, lesson_no: 3, assigned_session_id: k2.id, review_session_id: k4.id, result: 'reprovado', assigned_on: dia(-21), reviewed_on: dia(-7), notes: 'Confundiu passado simples com continuo.' });
+  await sbInsert('assignments', { student_id: ana.id, book_id: b1.id, lesson_no: 4, assigned_session_id: k2.id, review_session_id: k4.id, result: 'aprovado', assigned_on: dia(-21), reviewed_on: dia(-7) });
+  await sbInsert('assignments', { student_id: ana.id, book_id: b1.id, lesson_no: 3, lesson_label: 'Licao 3 (refazer)', assigned_session_id: k4.id, attempt_no: 2, assigned_on: dia(-7) });
+  await sbInsert('assignments', { student_id: ana.id, book_id: b1.id, lesson_no: 5, assigned_session_id: k4.id, assigned_on: dia(-7) });
+
+  /* Camila: uma aula dada e uma cancelada por mim. */
+  const k5 = await sbInsert('sessions', { student_id: camila.id, session_date: dia(-14) });
+  await sbInsert('sessions', { student_id: camila.id, session_date: dia(-7), status: 'cancelada', notes: 'Eu precisei remarcar.' });
+  await sbInsert('assignments', { student_id: camila.id, book_id: b2.id, lesson_no: 1, review_session_id: k5.id, result: 'aprovado', assigned_on: dia(-21), reviewed_on: dia(-14) });
+  await sbInsert('assignments', { student_id: camila.id, book_id: b2.id, lesson_no: 2, lesson_label: 'Unit 2 - pag 18', assigned_session_id: k5.id, assigned_on: dia(-14) });
+
+  /* Bruno: licoes pendentes nos tres livros ao mesmo tempo. */
+  const k7 = await sbInsert('sessions', { student_id: bruno.id, session_date: dia(-12) });
+  const k8 = await sbInsert('sessions', { student_id: bruno.id, session_date: dia(-5) });
+  await sbInsert('assignments', { student_id: bruno.id, book_id: b1.id, lesson_no: 6, assigned_session_id: k7.id, review_session_id: k8.id, result: 'aprovado', assigned_on: dia(-12), reviewed_on: dia(-5) });
+  await sbInsert('assignments', { student_id: bruno.id, book_id: b2.id, lesson_no: 4, assigned_session_id: k7.id, review_session_id: k8.id, result: 'reprovado', assigned_on: dia(-12), reviewed_on: dia(-5) });
+  await sbInsert('assignments', { student_id: bruno.id, book_id: b1.id, lesson_no: 7, lesson_label: 'Unit 7 - pag 42', assigned_session_id: k8.id, assigned_on: dia(-5) });
+  await sbInsert('assignments', { student_id: bruno.id, book_id: b2.id, lesson_no: 4, assigned_session_id: k8.id, attempt_no: 2, assigned_on: dia(-5) });
+  await sbInsert('assignments', { student_id: bruno.id, book_id: b3.id, lesson_no: 2, assigned_session_id: k8.id, assigned_on: dia(-5) });
+
+  await reload();
+  toast('Exemplo carregado.');
+}
+
+async function apagarTudo() {
+  if (!await confirmSheet('Apagar tudo?',
+    'Alunos, livros, aulas e licoes serao apagados. Baixe um backup antes se quiser guardar.',
+    'Apagar tudo')) return;
+  DB = emptyDB();
+  await reload();
+  toast('Tudo apagado.');
+}
+
+/* ==========================================================================
+   17. TEMA, SERVICE WORKER, ROTEADOR, BOOT
    ========================================================================== */
 function applyTheme() {
   const t = store.get(K_THEME, 'auto');
@@ -1848,9 +2030,11 @@ function currentTab(path) {
 }
 
 function render() {
-  setBanner(STALE ? 'Sem conexao com o servidor - mostrando dados salvos no aparelho.' : '');
-  if (!CFG) { document.getElementById('tabbar').hidden = true; return mount(viewSetup()); }
-  if (!SESS) { document.getElementById('tabbar').hidden = true; return mount(viewLogin()); }
+  setBanner(
+    PENDENTE ? 'Alteracoes guardadas neste aparelho, ainda nao enviadas. Toque em Config para enviar.'
+      : STALE ? 'Sem conexao com o servidor - mostrando a ultima versao carregada.'
+        : '');
+  if (!SENHA) { document.getElementById('tabbar').hidden = true; return mount(viewSenha()); }
 
   const path = (location.hash || '#/hoje').slice(1) || '/hoje';
   renderTabbar(currentTab(path));
@@ -1867,13 +2051,22 @@ window.addEventListener('hashchange', render);
   applyTheme();
   registerSW();
   if (!location.hash) location.hash = '#/hoje';
-  if (!CFG || !SESS) return render();
+  if (!SENHA) return render();
   try {
-    await loadAll();
+    if (PENDENTE) {
+      /* Ficou algo por enviar da ultima vez: tenta subir antes de ler. */
+      try { await enviar(); } catch (e) { if (e.status === 409) { render(); return sheetConflito(); } throw e; }
+    }
+    await carregar();
   } catch (e) {
+    if (e.status === 401) {
+      SENHA = null;
+      store.del(K_SENHA);
+      render();
+      return toast('Senha recusada. Entre novamente.', true);
+    }
     STALE = true;
-    if (String(e.message).includes('Sessao expirada')) return render();
-    toast(e.message || 'Sem conexao', true);
+    toast(e.message || 'Sem conexao com o servidor.', true);
   }
   render();
 })();
