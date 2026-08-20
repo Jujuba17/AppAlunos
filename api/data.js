@@ -76,8 +76,9 @@ async function lerDocumento() {
     throw new Error('O arquivo de dados esta corrompido e nao pode ser lido.');
   }
   const data = documentoVazio();
-  for (const t of TABELAS) if (Array.isArray(doc[t])) data[t] = doc[t];
-  return { etag: achado.blob.etag, data };
+  const bruto = doc && doc.data ? doc.data : doc;
+  for (const t of TABELAS) if (Array.isArray(bruto[t])) data[t] = bruto[t];
+  return { etag: achado.blob.etag, data, gravado_em: (doc && doc.gravado_em) || null };
 }
 
 /** Aceita apenas o formato esperado - evita gravar lixo em cima dos dados. */
@@ -146,15 +147,34 @@ export default async function handler(req, res) {
       });
 
       try {
-        const salvo = await put(CAMINHO, conteudo, {
+        await put(CAMINHO, conteudo, {
           access: 'private',
           contentType: 'application/json; charset=utf-8',
           addRandomSuffix: false,
-          cacheControlMaxAge: 60,
+          cacheControlMaxAge: 0,
           // Sem etag = primeira gravacao: recusa se alguem criou antes.
           ...(corpo.etag ? { ifMatch: corpo.etag } : { allowOverwrite: false }),
         });
-        return responder(res, 200, { etag: salvo.etag });
+
+        /* Le de volta antes de confirmar. Isso garante duas coisas:
+           1. Que a gravacao realmente pode ser lida - se nao puder, o app
+              recebe erro em vez de um "ok" falso e perder os dados.
+           2. Que o ETag devolvido e o mesmo que a proxima leitura vera, e
+              portanto o mesmo que o proximo ifMatch vai comparar. */
+        const conferido = await lerDocumento();
+        if (!conferido.etag) {
+          return responder(res, 500, {
+            erro: 'A gravacao nao pode ser confirmada: o arquivo nao foi encontrado depois de salvo.',
+          });
+        }
+        const gravou = TABELAS.every(
+          (t) => conferido.data[t].length === corpo.data[t].length);
+        if (!gravou) {
+          return responder(res, 500, {
+            erro: 'A gravacao nao pode ser confirmada: o arquivo lido nao corresponde ao enviado.',
+          });
+        }
+        return responder(res, 200, { etag: conferido.etag });
       } catch (e) {
         const conflito = e instanceof BlobPreconditionFailedError ||
                          /already exists|precondition/i.test(String(e && e.message));
