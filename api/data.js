@@ -4,8 +4,14 @@
  * Guarda TODOS os dados do app num unico JSON privado no Vercel Blob.
  * Nao existe banco de dados: o documento inteiro e lido e regravado.
  *
- *   GET  /api/data  ->  { etag, data }
- *   PUT  /api/data  <-  { etag, data }   ->  { etag }
+ *   GET  /api/data          ->  { etag, data }
+ *   GET  /api/data?so=etag  ->  { etag }            (so o numero da versao)
+ *   PUT  /api/data          <-  { etag, data }   ->  { etag }
+ *
+ * A variante ?so=etag existe porque o app pergunta "mudou algo?" de dez em
+ * dez segundos. Ela consulta apenas o metadado do blob: nao baixa o
+ * documento nem o interpreta. O documento inteiro so desce quando a resposta
+ * traz um etag diferente do que o aparelho ja tem.
  *
  * Duas protecoes importantes:
  *
@@ -22,7 +28,7 @@
  *   APP_SENHA              - a senha de acesso ao app, definida por voce
  */
 
-import { get, put, BlobPreconditionFailedError } from '@vercel/blob';
+import { get, head, put, BlobNotFoundError, BlobPreconditionFailedError } from '@vercel/blob';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const CAMINHO = 'dados/alunos.json';
@@ -62,6 +68,21 @@ async function lerCorpo(req) {
   }
   if (!total) return null;
   return JSON.parse(Buffer.concat(partes).toString('utf8'));
+}
+
+/** So a versao atual, sem trazer o conteudo. Barato o suficiente para ser
+    consultado a cada poucos segundos por cada aparelho aberto. */
+async function lerEtag() {
+  try {
+    const meta = await head(CAMINHO);
+    return meta.etag;
+  } catch (e) {
+    if (e instanceof BlobNotFoundError) return null;
+    /* Se a consulta de metadado falhar por outro motivo, cai para a leitura
+       completa: e mais lenta, mas responde a mesma pergunta. Melhor isso do
+       que devolver erro numa consulta que o app faz o tempo todo. */
+    return (await lerDocumento()).etag;
+  }
 }
 
 /** Le o documento atual. Devolve etag null quando ainda nao existe nenhum. */
@@ -121,6 +142,10 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      const busca = new URL(req.url, 'http://interno').searchParams;
+      if (busca.get('so') === 'etag') {
+        return responder(res, 200, { etag: await lerEtag() });
+      }
       const doc = await lerDocumento();
       return responder(res, 200, doc);
     }

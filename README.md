@@ -55,10 +55,23 @@ documento inteiro quando voce salva algo. Quatro coisas que valem saber:
 serve para nada sem o token da Vercel, que existe apenas no servidor. Ninguem
 le seus dados pela internet.
 
-**O app confere a nuvem sozinho.** Nao so ao abrir: toda vez que volta para a
-frente (ganha foco, sai do segundo plano), quando a conexao volta, e a cada
-cinco minutos enquanto a tela esta visivel. Uma aba esquecida aberta no computador
-nao fica mais parada no que leu de manha.
+**Nada fica esperando neste aparelho.** Tudo o que voce salva vai para o
+servidor na hora, e o app so diz que salvou depois que o servidor confirmou. Se
+a gravacao falhar - sem internet, servidor fora - a alteracao e desfeita na
+tela e o erro aparece. Nao existe fila local: o que esta na tela e o que esta
+gravado.
+
+**A sincronizacao e automatica.** O app confere a nuvem ao ganhar foco, ao
+voltar do segundo plano, quando a conexao volta, e de dez em dez segundos
+enquanto a tela esta visivel. O que voce faz no celular aparece no computador
+em segundos, sem ninguem pedir.
+
+Conferir tao seguido e barato porque a pergunta e curta: `GET /api/data?so=etag`
+devolve so o numero da versao atual - consulta o metadado do blob, sem baixar
+nem interpretar o documento. O documento inteiro so desce quando esse numero
+mudou. Em repouso, cada aparelho aberto gasta uma consulta de metadado a cada
+dez segundos e nada mais. (Navegador em aba de fundo estrangula o timer por
+conta propria, o que reduz isso ainda mais.)
 
 **Duas gravacoes nao se atropelam, e nenhuma e jogada fora.** Cada leitura traz
 um ETag, e a gravacao so e aceita se o ETag ainda for o mesmo - senao o
@@ -80,9 +93,9 @@ ser conflito: as duas coisas simplesmente cabem juntas. Depois de mesclar, o
 app reaplica as regras que ele ja garantia na gravacao - uma aula por aluno por
 dia, e nada de licao orfa de aluno ou livro apagado.
 
-**Funciona sem internet.** Se o envio falhar, a alteracao fica guardada no
-aparelho com um aviso na tela, e sobe sozinha na proxima vez que o app abrir ou
-quando a conexao voltar - mesclando, se a nuvem tiver andado nesse meio-tempo.
+**O que fica guardado no aparelho e so um retrato.** O `localStorage` guarda a
+ultima leitura para a tela abrir preenchida em vez de piscar vazia esperando a
+rede - e isso e tudo. Nao ha alteracao sua morando ali.
 
 ## Publicar na Vercel
 
@@ -183,6 +196,9 @@ arquivo so.
 - **Cache sem base de comparacao**: se o cache do aparelho vier de uma versao
   antiga do app, a mesclagem nao sabe quem apagou o que e junta os dois lados.
   O efeito e algo apagado voltar - de proposito, para nao perder nada.
+- **Sem internet nao da para usar**: por escolha. Salvar exige o servidor no
+  ar; se ele nao responder, a alteracao e desfeita e voce tenta de novo. E o
+  preco de a tela nunca mentir sobre o que esta gravado.
 - **Uma senha para tudo**: nao ha usuarios separados. E o app de uma pessoa.
 - **Service worker**: o registro nao foi verificado num navegador real ainda.
   Se a instalacao como app nao aparecer no celular, e ai que devo olhar.

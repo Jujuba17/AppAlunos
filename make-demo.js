@@ -106,9 +106,10 @@ trocarRegex(
   /document\.addEventListener\('visibilitychange'[\s\S]*?setInterval\([\s\S]*?sincronizar\(\);[^\n]*\n/,
   '/* modo demonstracao: sem sincronizacao automatica, o servidor e ficticio */\n');
 
-/* --- 4. aviso no topo, no lugar do banner de pendencia --- */
-trocar("        : '');",
-       "        : 'Demonstracao com dados ficticios. Nada e salvo - recarregue para recomecar.');");
+/* --- 4. aviso fixo no topo, no lugar do banner de estado da conexao --- */
+trocarRegex(
+  /setBanner\(STALE[\s\S]*?: ''\);/,
+  "setBanner('Demonstracao com dados ficticios. Nada e salvo - recarregue para recomecar.');");
 
 /* --- 5. sem service worker, e com os alunos ficticios ja carregados --- */
 trocar('  registerSW();',

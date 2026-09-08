@@ -478,8 +478,7 @@ const emptyDB = () => ({ students: [], books: [], enrollments: [], sessions: [],
 let SENHA = store.get(K_SENHA, null);
 let DB = emptyDB();
 let ETAG = null;
-let STALE = false;      // mostrando dados do cache, sem contato com o servidor
-let PENDENTE = false;   // ha alteracoes locais ainda nao enviadas
+let STALE = false;      // a ultima conversa com o servidor falhou
 let ULTIMO_SYNC = null; // quando a nuvem foi conferida pela ultima vez
 
 /* BASE e a ultima versao que o servidor confirmou para este aparelho. Nao e
@@ -505,13 +504,11 @@ function normalizar(bruto) {
   for (const t of TABELAS) if (bruto && Array.isArray(bruto[t])) d[t] = bruto[t];
   return ordenar(d);
 }
+/* O cache e so um retrato da ultima leitura, para a tela aparecer preenchida
+   no instante em que o app abre em vez de piscar vazia esperando a rede. Nao
+   guarda alteracao nenhuma: tudo o que voce salva ja esta no servidor. */
 function salvarCache() {
-  store.set(K_CACHE, {
-    etag: ETAG, pendente: PENDENTE, data: DB, sync: ULTIMO_SYNC,
-    /* BASE so serve para mesclar, e mesclar so acontece quando ha algo por
-       enviar. Guardar sempre dobraria o tamanho no localStorage por nada. */
-    base: PENDENTE ? BASE : null,
-  });
+  store.set(K_CACHE, { etag: ETAG, data: DB, sync: ULTIMO_SYNC });
 }
 function lerCache() {
   const c = store.get(K_CACHE, null);
@@ -519,28 +516,24 @@ function lerCache() {
   if (c.data) {
     DB = normalizar(c.data);
     ETAG = c.etag || null;
-    PENDENTE = !!c.pendente;
     ULTIMO_SYNC = c.sync || null;
-    BASE = c.base ? normalizar(c.base) : null;
   }
   else DB = normalizar(c);   // formato antigo, so os dados
 }
 lerCache();
 
 /* --- conversa com /api/data --- */
-async function api(metodo, corpo) {
+async function api(metodo, corpo, query) {
   let res;
   try {
-    res = await fetch(API, {
+    res = await fetch(API + (query || ''), {
       method: metodo,
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json', 'x-app-senha': SENHA || '' },
       body: corpo ? JSON.stringify(corpo) : undefined,
     });
   } catch {
-    const e = new Error('Sem conexao com o servidor.');
-    e.offline = true;
-    throw e;
+    throw new Error('Sem conexao com o servidor.');
   }
   let j = null;
   try { j = await res.json(); } catch {}
@@ -557,7 +550,6 @@ function adotar(r) {
   DB = normalizar(r.data);
   BASE = clonar(DB);
   STALE = false;
-  PENDENTE = false;
   ULTIMO_SYNC = Date.now();
   salvarCache();
 }
@@ -569,7 +561,6 @@ async function enviar() {
   ETAG = r.etag || null;
   BASE = clonar(DB);
   STALE = false;
-  PENDENTE = false;
   ULTIMO_SYNC = Date.now();
   salvarCache();
 }
@@ -714,8 +705,6 @@ async function enviarMesclando() {
       const r = mesclar(BASE, DB, normalizar(nuvem.data));
       DB = r.data;
       ETAG = nuvem.etag || null;
-      PENDENTE = true;
-      salvarCache();
       relato = somarRelato(relato, r.relato);
     }
   }
@@ -725,20 +714,33 @@ async function enviarMesclando() {
   throw e;
 }
 
-/* --- gravacao: altera a memoria e envia; nunca perde o dado em caso de falha --- */
+/* --------------------------------------------------------------------------
+   GRAVACAO: OU O SERVIDOR CONFIRMA, OU NAO ACONTECEU
+
+   Nao existe fila neste aparelho. Toda alteracao vai para o servidor na hora,
+   e o app so continua depois que o servidor confirmou. Se a gravacao falhar, a
+   tela volta para a ultima versao confirmada e o erro sobe para quem chamou -
+   e por isso que reload() lanca em vez de engolir: o "Aluno cadastrado" da
+   folha de edicao nao pode aparecer se o aluno nao foi cadastrado.
+   -------------------------------------------------------------------------- */
 async function reload() {
+  const confirmado = BASE ? clonar(BASE) : null;
   ordenar(DB);
-  PENDENTE = true;
-  salvarCache();
   try {
     const relato = await enviarMesclando();
+    render();
     if (relato && relato.trazidos) toast(textoRelato(relato));
   } catch (e) {
-    if (e.status === 401) { SENHA = null; store.del(K_SENHA); render(); return toast('Senha recusada. Entre novamente.', true); }
-    STALE = !!e.offline;
-    toast(e.message + ' As alteracoes ficaram guardadas neste aparelho.', true);
+    /* Desfaz: o que aparece na tela passa a ser exatamente o que esta gravado,
+       para nao ficar a impressao de que salvou. */
+    if (confirmado) { DB = normalizar(confirmado); BASE = clonar(DB); salvarCache(); }
+    STALE = true;
+    if (e.status === 401) { SENHA = null; store.del(K_SENHA); }
+    render();
+    throw new Error(e.status === 401
+      ? 'Senha recusada. Entre novamente.'
+      : 'Nao salvou: ' + e.message);
   }
-  render();
 }
 
 /* --------------------------------------------------------------------------
@@ -751,11 +753,17 @@ async function reload() {
    no celular, e qualquer gravacao batia de frente com a nuvem e caia na
    pergunta de conflito.
 
-   Agora o app confere a nuvem sempre que volta para a frente: ao ganhar foco,
-   ao voltar de segundo plano, quando a conexao volta, e a cada cinco minutos
-   enquanto a tela esta visivel.
+   Agora o app confere a nuvem sempre que volta para a frente - ao ganhar
+   foco, ao voltar do segundo plano, quando a conexao volta - e de dez em dez
+   segundos enquanto a tela esta visivel, para o que foi feito no celular
+   aparecer no computador sem ninguem pedir.
+
+   Conferir tao seguido so e barato porque a pergunta e curta: `?so=etag`
+   devolve apenas o numero da versao atual, sem baixar nem interpretar o
+   documento. O documento inteiro so desce quando esse numero mudou.
    -------------------------------------------------------------------------- */
 let sincronizando = false;
+const INTERVALO_SYNC = 10 * 1000;
 
 async function sincronizar(opcoes) {
   const aviso = !!(opcoes && opcoes.aviso);
@@ -765,31 +773,24 @@ async function sincronizar(opcoes) {
   if (sheetStack && !aviso) return;
   sincronizando = true;
   try {
-    if (PENDENTE) {
-      const relato = await enviarMesclando();
-      render();
-      if (aviso) toast(textoRelato(relato, 'Enviado'));
-      else if (relato && relato.trazidos) toast(textoRelato(relato, 'Enviado'));
+    const marca = await api('GET', null, '?so=etag');
+    if ((marca.etag || null) === ETAG) {
+      STALE = false;
+      ULTIMO_SYNC = Date.now();
+      salvarCache();
+      if (aviso) { render(); toast('Ja estava atualizado.'); }
       return;
     }
-    const anterior = ETAG;
-    const r = await api('GET');
-    if ((r.etag || null) !== anterior) {
-      adotar(r);
-      render();
-      return toast(aviso ? 'Atualizado.' : 'Dados atualizados de outro aparelho.');
-    }
-    STALE = false;
-    ULTIMO_SYNC = Date.now();
-    salvarCache();
-    if (aviso) { render(); toast('Ja estava atualizado.'); }
+    adotar(await api('GET'));
+    render();
+    toast(aviso ? 'Atualizado.' : 'Atualizado com o que foi feito em outro aparelho.');
   } catch (e) {
     if (e.status === 401) { SENHA = null; store.del(K_SENHA); render(); return toast('Senha recusada. Entre novamente.', true); }
-    STALE = !!e.offline;
+    STALE = true;
     render();
-    /* Ficar sem rede em segundo plano nao merece um alerta: o banner do topo
-       ja diz que os dados sao da ultima leitura. */
-    if (aviso || !e.offline) toast(e.message || 'Falha ao atualizar', true);
+    /* Uma conferencia de fundo que falhou nao merece um alerta: o banner do
+       topo ja avisa que a tela pode estar velha. */
+    if (aviso) toast(e.message || 'Falha ao atualizar', true);
   } finally {
     sincronizando = false;
   }
@@ -800,10 +801,7 @@ function refreshNow() { return sincronizar({ aviso: true }); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
 window.addEventListener('focus', () => sincronizar());
 window.addEventListener('online', () => sincronizar());
-/* Foco e volta do segundo plano ja cobrem o uso normal. Este timer e so para
-   a aba que fica visivel e parada enquanto o outro aparelho trabalha - de
-   cinco em cinco minutos, para nao gastar chamadas da Vercel de graca. */
-setInterval(() => { if (!document.hidden) sincronizar(); }, 5 * 60 * 1000);
+setInterval(() => { if (!document.hidden) sincronizar(); }, INTERVALO_SYNC);
 
 /* ==========================================================================
    4. REGISTROS: ID, VALORES PADRAO, EXCLUSAO EM CASCATA
@@ -1927,11 +1925,9 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 function viewConfig() {
   setTopbar('Configuracoes');
   const theme = store.get(K_THEME, 'auto');
-  const estado = PENDENTE
-    ? { texto: 'Ha alteracoes guardadas neste aparelho que ainda nao subiram.', cor: 'warn' }
-    : STALE
-      ? { texto: 'Sem contato com o servidor. Mostrando a ultima versao carregada.', cor: 'bad' }
-      : { texto: 'Tudo sincronizado com a nuvem.', cor: 'ok' };
+  const estado = STALE
+    ? { texto: 'A ultima conversa com o servidor falhou. O que esta na tela pode estar velho.', cor: 'bad' }
+    : { texto: 'Tudo sincronizado com a nuvem.', cor: 'ok' };
   const conferido = ULTIMO_SYNC
     ? new Date(ULTIMO_SYNC).toLocaleString('pt-BR',
         { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -1946,23 +1942,20 @@ function viewConfig() {
           ? h('p', { class: 'tiny muted', style: 'margin-top:8px' }, 'Ultima conferencia: ' + conferido)
           : null,
         h('p', { class: 'tiny muted', style: 'margin-top:10px' },
-          'Os dados ficam num arquivo JSON na sua conta da Vercel. O app confere a nuvem ' +
-          'sozinho toda vez que volta para a frente. Se voce mexeu no celular e no ' +
-          'computador, as duas edicoes sao juntadas registro por registro - so no caso de ' +
-          'os dois aparelhos mexerem no mesmo registro vence a edicao mais recente.'),
+          'Os dados ficam num arquivo JSON na sua conta da Vercel. Tudo o que voce salva ' +
+          'vai para la na hora, e o app confere a nuvem a cada dez segundos - nada fica ' +
+          'guardado esperando neste aparelho. Se voce mexeu no celular e no computador, as ' +
+          'duas edicoes sao juntadas registro por registro; so no caso de os dois aparelhos ' +
+          'mexerem no mesmo registro vence a edicao mais recente.'),
         h('div', { class: 'wrap', style: 'margin-top:12px' },
-          h('button', { class: 'btn sm', onclick: refreshNow },
-            PENDENTE ? 'Enviar e atualizar' : 'Atualizar agora'),
+          h('button', { class: 'btn sm', onclick: refreshNow }, 'Atualizar agora'),
           h('button', {
             class: 'btn sm danger', onclick: async () => {
               if (!await confirmSheet('Esquecer a senha neste aparelho?',
-                PENDENTE
-                  ? 'ATENCAO: existem alteracoes que ainda nao subiram e serao perdidas. Envie antes de sair.'
-                  : 'Os dados na nuvem continuam intactos. Voce digita a senha de novo na proxima vez.',
+                'Os dados na nuvem continuam intactos. Voce digita a senha de novo na proxima vez.',
                 'Esquecer')) return;
               SENHA = null;
               ETAG = null;
-              PENDENTE = false;
               BASE = null;
               ULTIMO_SYNC = null;
               DB = emptyDB();
@@ -2184,8 +2177,8 @@ async function carregarExemplo() {
   await sbInsert('assignments', { student_id: bruno.id, book_id: b2.id, lesson_no: 4, assigned_session_id: k8.id, attempt_no: 2, assigned_on: dia(-5) });
   await sbInsert('assignments', { student_id: bruno.id, book_id: b3.id, lesson_no: 2, assigned_session_id: k8.id, assigned_on: dia(-5) });
 
-  await reload();
-  toast('Exemplo carregado.');
+  try { await reload(); toast('Exemplo carregado.'); }
+  catch (e) { toast(e.message, true); }
 }
 
 async function apagarTudo() {
@@ -2193,8 +2186,8 @@ async function apagarTudo() {
     'Alunos, livros, aulas e licoes serao apagados. Baixe um backup antes se quiser guardar.',
     'Apagar tudo')) return;
   DB = emptyDB();
-  await reload();
-  toast('Tudo apagado.');
+  try { await reload(); toast('Tudo apagado.'); }
+  catch (e) { toast(e.message, true); }
 }
 
 /* ==========================================================================
@@ -2228,10 +2221,9 @@ function currentTab(path) {
 }
 
 function render() {
-  setBanner(
-    PENDENTE ? 'Alteracoes guardadas neste aparelho. Sobem sozinhas quando a conexao voltar.'
-      : STALE ? 'Sem conexao com o servidor - mostrando a ultima versao carregada.'
-        : '');
+  setBanner(STALE
+    ? 'A ultima conversa com o servidor falhou. O que esta na tela pode estar velho.'
+    : '');
   if (!SENHA) { document.getElementById('tabbar').hidden = true; return mount(viewSenha()); }
 
   const path = (location.hash || '#/hoje').slice(1) || '/hoje';
@@ -2254,14 +2246,7 @@ window.addEventListener('hashchange', render);
      vem logo atras e redesenha a tela. */
   render();
   try {
-    if (PENDENTE) {
-      /* Ficou algo por enviar da ultima vez: sobe agora, mesclando se a nuvem
-         tiver andado nesse meio-tempo. */
-      const relato = await enviarMesclando();
-      if (relato && relato.trazidos) toast(textoRelato(relato, 'Enviado'));
-    } else {
-      await carregar();
-    }
+    await carregar();
   } catch (e) {
     if (e.status === 401) {
       SENHA = null;
