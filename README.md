@@ -29,6 +29,7 @@ armazenamento da propria Vercel.
 | `demo.html` | Mesmo app com dados ficticios, sem servidor e sem senha |
 | `manifest.webmanifest` | Manifest PWA (instalar no celular) |
 | `sw.js` | Service worker: abre offline com a ultima versao carregada |
+| `make-demo.js` | Gera o `demo.html` a partir do `index.html` (`node make-demo.js`) |
 | `make-icons.js` | Gera os icones PNG (`node make-icons.js`) |
 | `icons/` | Icones gerados |
 
@@ -48,20 +49,40 @@ Existe **um** documento JSON com cinco listas dentro:
   nova tentativa, e e disso que sai o mapa de licoes que mais reprovam.
 
 O app carrega o documento inteiro ao abrir, trabalha em memoria, e regrava o
-documento inteiro quando voce salva algo. Tres coisas que valem saber:
+documento inteiro quando voce salva algo. Quatro coisas que valem saber:
 
 **O arquivo e privado.** Ele e criado com `access: 'private'`, e a URL dele nao
 serve para nada sem o token da Vercel, que existe apenas no servidor. Ninguem
 le seus dados pela internet.
 
-**Duas gravacoes nao se atropelam.** Cada leitura traz um ETag, e a gravacao so
-e aceita se o ETag ainda for o mesmo. Se voce editou no celular e no PC, o
-segundo envio e recusado e o app pergunta: *manter as minhas* ou *descartar as
-minhas*. Nada e sobrescrito em silencio.
+**O app confere a nuvem sozinho.** Nao so ao abrir: toda vez que volta para a
+frente (ganha foco, sai do segundo plano), quando a conexao volta, e a cada
+cinco minutos enquanto a tela esta visivel. Uma aba esquecida aberta no computador
+nao fica mais parada no que leu de manha.
+
+**Duas gravacoes nao se atropelam, e nenhuma e jogada fora.** Cada leitura traz
+um ETag, e a gravacao so e aceita se o ETag ainda for o mesmo - senao o
+servidor devolve 409. Ai o app le a versao da nuvem e **mescla as duas**, em vez
+de pedir para voce escolher qual aparelho perde o trabalho.
+
+A mesclagem e de tres vias e por registro, nao pelo documento inteiro:
+
+| | o que acontece |
+| --- | --- |
+| So voce mexeu no registro | a sua versao entra |
+| So o outro aparelho mexeu | a versao dele entra |
+| Cada um criou um registro novo | os dois entram |
+| Um dos dois apagou o registro | fica apagado |
+| Os dois mexeram no **mesmo** registro | vence o `updated_at` mais recente |
+
+Cadastrar um aluno no computador enquanto o celular registra uma aula deixou de
+ser conflito: as duas coisas simplesmente cabem juntas. Depois de mesclar, o
+app reaplica as regras que ele ja garantia na gravacao - uma aula por aluno por
+dia, e nada de licao orfa de aluno ou livro apagado.
 
 **Funciona sem internet.** Se o envio falhar, a alteracao fica guardada no
-aparelho com um aviso na tela, e sobe sozinha na proxima vez que o app abrir
-ou quando voce tocar em *Enviar e atualizar*.
+aparelho com um aviso na tela, e sobe sozinha na proxima vez que o app abrir ou
+quando a conexao voltar - mesclando, se a nuvem tiver andado nesse meio-tempo.
 
 ## Publicar na Vercel
 
@@ -135,8 +156,9 @@ livros, aulas realizadas, uma falta e uma aula cancelada. Nao pede senha, nao
 grava nada, e recarregar a pagina devolve tudo ao estado inicial. Serve para
 conhecer as telas ou mostrar o app para outra pessoa.
 
-Ele e gerado a partir do `index.html`, entao nao edite `demo.html` a mao - as
-mudancas reais vao no `index.html`.
+Ele e gerado a partir do `index.html` por `node make-demo.js`, entao nao edite
+`demo.html` a mao - as mudancas reais vao no `index.html`, e depois roda-se o
+gerador.
 
 O proprio app tambem tem **Configuracoes > Dados de exemplo**, que preenche a
 base de verdade com os mesmos alunos ficticios, e um botao para apagar tudo.
@@ -154,8 +176,13 @@ arquivo so.
 
 - **Tamanho**: o documento inteiro trafega em cada leitura e gravacao, com
   limite de 4 MB. Isso da folga para muitos anos de aulas, mas nao e um banco.
-- **Conflito**: o app detecta e pergunta, mas quem escolhe *manter as minhas*
-  substitui o que o outro aparelho fez. Nao existe mesclagem automatica.
+- **Conflito**: a mesclagem e por registro, nao por campo. Se os dois aparelhos
+  editarem o **mesmo** aluno (ou a mesma aula) antes de sincronizar, entra a
+  versao inteira mais recente - nao da para ficar com o telefone digitado num
+  aparelho e o horario digitado no outro. Registros diferentes nunca competem.
+- **Cache sem base de comparacao**: se o cache do aparelho vier de uma versao
+  antiga do app, a mesclagem nao sabe quem apagou o que e junta os dois lados.
+  O efeito e algo apagado voltar - de proposito, para nao perder nada.
 - **Uma senha para tudo**: nao ha usuarios separados. E o app de uma pessoa.
 - **Service worker**: o registro nao foi verificado num navegador real ainda.
   Se a instalacao como app nao aparecer no celular, e ai que devo olhar.
