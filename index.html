@@ -477,7 +477,13 @@ const emptyDB = () => ({ students: [], books: [], enrollments: [], sessions: [],
 
 let SENHA = store.get(K_SENHA, null);
 let DB = emptyDB();
+
+/* ETAG e a VERSAO do documento no servidor - o que a gravacao manda de volta
+   para provar em qual versao se baseou. MARCA e outra coisa: um valor que muda
+   a cada gravacao e serve so para a pergunta "mudou algo?", que o app faz de
+   dez em dez segundos sem baixar o documento. */
 let ETAG = null;
+let MARCA = null;
 let STALE = false;      // a ultima conversa com o servidor falhou
 let ULTIMO_SYNC = null; // quando a nuvem foi conferida pela ultima vez
 
@@ -508,7 +514,7 @@ function normalizar(bruto) {
    no instante em que o app abre em vez de piscar vazia esperando a rede. Nao
    guarda alteracao nenhuma: tudo o que voce salva ja esta no servidor. */
 function salvarCache() {
-  store.set(K_CACHE, { etag: ETAG, data: DB, sync: ULTIMO_SYNC });
+  store.set(K_CACHE, { etag: ETAG, marca: MARCA, data: DB, sync: ULTIMO_SYNC });
 }
 function lerCache() {
   const c = store.get(K_CACHE, null);
@@ -516,6 +522,7 @@ function lerCache() {
   if (c.data) {
     DB = normalizar(c.data);
     ETAG = c.etag || null;
+    MARCA = c.marca || null;
     ULTIMO_SYNC = c.sync || null;
   }
   else DB = normalizar(c);   // formato antigo, so os dados
@@ -547,6 +554,7 @@ async function api(metodo, corpo, query) {
 /** Adota o documento que a nuvem devolveu como a verdade deste aparelho. */
 function adotar(r) {
   ETAG = r.etag || null;
+  MARCA = r.marca || null;
   DB = normalizar(r.data);
   BASE = clonar(DB);
   STALE = false;
@@ -559,6 +567,7 @@ async function carregar() {
 async function enviar() {
   const r = await api('PUT', { etag: ETAG, data: DB });
   ETAG = r.etag || null;
+  MARCA = r.marca || null;
   BASE = clonar(DB);
   STALE = false;
   ULTIMO_SYNC = Date.now();
@@ -705,6 +714,7 @@ async function enviarMesclando() {
       const r = mesclar(BASE, DB, normalizar(nuvem.data));
       DB = r.data;
       ETAG = nuvem.etag || null;
+      MARCA = nuvem.marca || null;
       relato = somarRelato(relato, r.relato);
     }
   }
@@ -726,6 +736,10 @@ async function enviarMesclando() {
 async function reload() {
   const confirmado = BASE ? clonar(BASE) : null;
   ordenar(DB);
+  /* Enquanto esta gravacao nao terminar, a conferencia de fundo nao pode
+     trocar o DB por baixo dela - senao a alteracao desapareceria da tela no
+     meio do caminho. */
+  gravando = true;
   try {
     const relato = await enviarMesclando();
     render();
@@ -740,6 +754,8 @@ async function reload() {
     throw new Error(e.status === 401
       ? 'Senha recusada. Entre novamente.'
       : 'Nao salvou: ' + e.message);
+  } finally {
+    gravando = false;
   }
 }
 
@@ -763,18 +779,19 @@ async function reload() {
    documento. O documento inteiro so desce quando esse numero mudou.
    -------------------------------------------------------------------------- */
 let sincronizando = false;
+let gravando = false;
 const INTERVALO_SYNC = 10 * 1000;
 
 async function sincronizar(opcoes) {
   const aviso = !!(opcoes && opcoes.aviso);
-  if (sincronizando || !SENHA) return;
+  if (sincronizando || gravando || !SENHA) return;
   /* Com um formulario aberto, trocar os dados por baixo dele confundiria mais
      do que ajudaria. A conferencia fica para quando a folha fechar. */
   if (sheetStack && !aviso) return;
   sincronizando = true;
   try {
-    const marca = await api('GET', null, '?so=etag');
-    if ((marca.etag || null) === ETAG) {
+    const atual = await api('GET', null, '?so=marca');
+    if ((atual.marca || null) === MARCA) {
       STALE = false;
       ULTIMO_SYNC = Date.now();
       salvarCache();
@@ -1956,6 +1973,7 @@ function viewConfig() {
                 'Esquecer')) return;
               SENHA = null;
               ETAG = null;
+              MARCA = null;
               BASE = null;
               ULTIMO_SYNC = null;
               DB = emptyDB();
@@ -1981,6 +1999,15 @@ function viewConfig() {
         h('div', { class: 'wrap', style: 'margin-top:12px' },
           h('button', { class: 'btn sm', onclick: exportJson }, 'Baixar backup'),
           h('button', { class: 'btn sm', onclick: importJson }, 'Restaurar backup')))),
+
+    h('div', { class: 'section' },
+      sectionHead('Diagnostico'),
+      h('div', { class: 'card' },
+        h('p', { class: 'small muted' },
+          'Se o app deixar de salvar, isto mostra o que o servidor responde. ' +
+          'Nao altera nada - so pergunta.'),
+        h('div', { class: 'wrap', style: 'margin-top:12px' },
+          h('button', { class: 'btn sm', onclick: sheetDiagnostico }, 'Conferir servidor')))),
 
     installPrompt
       ? h('div', { class: 'section' },
@@ -2188,6 +2215,40 @@ async function apagarTudo() {
   DB = emptyDB();
   try { await reload(); toast('Tudo apagado.'); }
   catch (e) { toast(e.message, true); }
+}
+
+/** Pergunta ao servidor como ele esta vendo o arquivo de dados. So leitura. */
+async function sheetDiagnostico() {
+  let texto;
+  try {
+    texto = JSON.stringify(await api('GET', null, '?so=diagnostico'), null, 2);
+  } catch (e) {
+    texto = 'Nao consegui falar com o servidor.\n\n' + (e.message || e);
+  }
+  const corpo = h('pre', {
+    style: 'white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.45;' +
+           'margin:0;padding:12px;border-radius:var(--r-sm);background:var(--surface-2);' +
+           'border:1px solid var(--border);max-height:52vh;overflow:auto',
+  }, texto);
+
+  const close = openSheet({
+    title: 'Diagnostico do servidor',
+    body: h('div', {},
+      h('p', { class: 'tiny muted', style: 'margin-bottom:10px' },
+        'Versao neste aparelho: ' + (ETAG == null ? '(nenhuma)' : ETAG) + '.'),
+      corpo),
+    footer: [
+      h('button', {
+        class: 'btn', onclick: async () => {
+          try {
+            await navigator.clipboard.writeText(texto);
+            toast('Copiado.');
+          } catch { toast('Nao consegui copiar. Selecione o texto a mao.', true); }
+        },
+      }, 'Copiar'),
+      h('button', { class: 'btn primary', onclick: () => close() }, 'Fechar'),
+    ],
+  });
 }
 
 /* ==========================================================================

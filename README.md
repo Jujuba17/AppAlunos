@@ -66,17 +66,28 @@ voltar do segundo plano, quando a conexao volta, e de dez em dez segundos
 enquanto a tela esta visivel. O que voce faz no celular aparece no computador
 em segundos, sem ninguem pedir.
 
-Conferir tao seguido e barato porque a pergunta e curta: `GET /api/data?so=etag`
-devolve so o numero da versao atual - consulta o metadado do blob, sem baixar
-nem interpretar o documento. O documento inteiro so desce quando esse numero
-mudou. Em repouso, cada aparelho aberto gasta uma consulta de metadado a cada
-dez segundos e nada mais. (Navegador em aba de fundo estrangula o timer por
+Conferir tao seguido e barato porque a pergunta e curta: `GET /api/data?so=marca`
+devolve so uma marca que muda a cada gravacao - sai do metadado do blob, sem
+baixar nem interpretar o documento. O documento inteiro so desce quando essa
+marca muda. Em repouso, cada aparelho aberto gasta uma consulta de metadado a
+cada dez segundos e nada mais. (Navegador em aba de fundo estrangula o timer por
 conta propria, o que reduz isso ainda mais.)
 
-**Duas gravacoes nao se atropelam, e nenhuma e jogada fora.** Cada leitura traz
-um ETag, e a gravacao so e aceita se o ETag ainda for o mesmo - senao o
-servidor devolve 409. Ai o app le a versao da nuvem e **mescla as duas**, em vez
-de pedir para voce escolher qual aparelho perde o trabalho.
+**Duas gravacoes nao se atropelam, e nenhuma e jogada fora.** O documento
+carrega uma **versao** dentro dele - um inteiro que sobe de um em cada
+gravacao. O app manda de volta a versao em que baseou a edicao, e a gravacao so
+e aceita se essa versao ainda for a atual; senao o servidor devolve 409. Ai o
+app le a versao da nuvem e **mescla as duas**, em vez de pedir para voce
+escolher qual aparelho perde o trabalho.
+
+Esse papel era do ETag do blob, via `ifMatch`, e nao funcionava: o ETag que a
+leitura do conteudo devolve nao era aceito pelo `ifMatch` da gravacao, entao
+**toda** gravacao depois da primeira voltava 409 - em qualquer aparelho, sem
+conflito nenhum. Era o que fazia o app parar de salvar. Uma versao dentro do
+documento nao depende de detalhe nenhum do armazenamento. O `ifMatch` continua
+sendo usado como reforco contra duas gravacoes simultaneas de verdade, mas se
+ele recusar uma gravacao cuja versao ja foi conferida, a gravacao segue sem ele
+- `ifMatch` nunca volta a ser motivo de nada salvar.
 
 A mesclagem e de tres vias e por registro, nao pelo documento inteiro:
 
@@ -175,6 +186,17 @@ gerador.
 
 O proprio app tambem tem **Configuracoes > Dados de exemplo**, que preenche a
 base de verdade com os mesmos alunos ficticios, e um botao para apagar tudo.
+
+## Quando parar de salvar
+
+**Configuracoes > Diagnostico > Conferir servidor** pergunta ao servidor como
+ele esta vendo o arquivo de dados e mostra a resposta crua. Nao altera nada.
+
+O campo que importa e `etagDoBlob.iguais`: se vier `false`, o ETag da leitura e
+o do metadado divergem nesse ambiente - foi o que travava as gravacoes antes da
+versao no documento existir. `documento.versao` diz em que versao o servidor
+esta, e a folha mostra em que versao este aparelho esta; os dois numeros
+diferentes com o app parado significam que falta sincronizar.
 
 ## Backup
 
