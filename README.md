@@ -11,13 +11,22 @@ armazenamento da propria Vercel.
 ## O ciclo de uso
 
 1. Na aula de hoje, voce abre o app e ve as licoes que o aluno deveria trazer.
-2. Marca cada uma: **aprovado**, **reprovado**, **revisar** ou **nao trouxe**.
-   Ao marcar reprovado, a mesma licao ja e reagendada automaticamente para a
-   proxima aula, com o contador de tentativas somando.
-3. Adiciona as licoes da proxima aula (o numero vem pre-sugerido: a primeira
-   licao do livro que ainda nao foi aprovada nem esta pendente).
-4. Se o aluno faltou ou nao teve aula, registra com a data e o motivo. As
+2. **Ate onde o aluno chegou**: sobe o contador ate a ultima licao que ele
+   estudou - inclusive alem do que voce passou. Tudo dali para tras entra como
+   aprovado de uma vez, e as licoes que voce nem tinha passado sao criadas na
+   hora, marcadas como *adiantou*.
+3. **Confere**, mudando so o que nao foi bem: **aprovado**, **reprovado**,
+   **revisar** ou **nao trouxe**. Ao marcar reprovado, a mesma licao ja e
+   reagendada para a proxima aula, com o contador de tentativas somando.
+4. **Passa as licoes da proxima aula.** O campo aceita uma ("11"), uma faixa
+   ("11-13") ou varias ("11,12,15"), entao dez licoes sao um lancamento so. O
+   numero ja vem pre-sugerido na primeira licao ainda nao aprovada nem pendente.
+5. Se o aluno faltou ou nao teve aula, registra com a data e o motivo. As
    licoes pendentes rolam para a proxima aula.
+
+Depois que a aula esta fechada, **nao e preciso reabri-la** para mexer nas
+licoes: a secao *Licoes para a proxima aula*, na ficha do aluno, passa,
+edita e remove licao ali mesmo.
 
 ## Estrutura
 
@@ -221,6 +230,10 @@ arquivo so.
 - **Sem internet nao da para usar**: por escolha. Salvar exige o servidor no
   ar; se ele nao responder, a alteracao e desfeita e voce tenta de novo. E o
   preco de a tela nunca mentir sobre o que esta gravado.
+- **Conferencia olha a data**: uma aula so pode conferir licao que ja tinha
+  sido passada quando ela aconteceu. Se voce passar uma licao hoje e depois
+  registrar a aula de hoje, essa licao fica para a proxima - que e o que voce
+  quis dizer ao passa-la.
 - **Uma senha para tudo**: nao ha usuarios separados. E o app de uma pessoa.
 - **Service worker**: o registro nao foi verificado num navegador real ainda.
   Se a instalacao como app nao aparecer no celular, e ai que devo olhar.

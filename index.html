@@ -926,6 +926,53 @@ function suggestNextLesson(sid, bid) {
 const attemptsFor = (sid, bid, lesson) =>
   DB.assignments.filter((a) => a.student_id === sid && a.book_id === bid && a.lesson_no === lesson).length;
 
+/**
+ * Le "11", "11-13", "11 a 13" ou "11,12,15" e devolve os numeros.
+ *
+ * Existe para nao ser preciso repetir "digita o numero, clica em adicionar"
+ * dez vezes quando o aluno vai fazer dez licoes. Devolve null quando nao da
+ * para entender o que foi escrito - quem chama e que decide o recado.
+ */
+function parseLicoes(texto) {
+  const numeros = new Set();
+  for (const pedaco of String(texto || '').split(/[,;]+/)) {
+    const t = pedaco.trim().toLowerCase();
+    if (!t) continue;
+    const faixa = t.match(/^(\d+)\s*(?:-|–|ate|até|a)\s*(\d+)$/);
+    if (faixa) {
+      let de = parseInt(faixa[1], 10), ate = parseInt(faixa[2], 10);
+      if (de > ate) { const x = de; de = ate; ate = x; }
+      if (ate - de > 300) return null;          // faixa absurda, provavel erro de digitacao
+      for (let n = de; n <= ate; n++) numeros.add(n);
+      continue;
+    }
+    if (/^\d+$/.test(t)) { numeros.add(parseInt(t, 10)); continue; }
+    return null;
+  }
+  const lista = [...numeros].filter((n) => n >= 1).sort((a, b) => a - b);
+  return lista.length ? lista : null;
+}
+
+/**
+ * As licoes que faltam registrar entre onde o aluno estava (`de`) e onde ele
+ * chegou (`ate`).
+ *
+ * Ficam de fora as que ja estao pendentes (essas ja aparecem na lista de
+ * conferir) e as que ja foram aprovadas antes (nao se aprova duas vezes). O
+ * comeco vem de quem chama, e nao da licao 1: se o aluno esta na 30, dizer
+ * "chegou ate a 35" nao pode inventar as 29 primeiras.
+ */
+function faixaEstudada(sid, bid, de, ate) {
+  const minhas = DB.assignments.filter((a) => a.student_id === sid && a.book_id === bid);
+  const pendentes = new Set(minhas.filter((a) => a.result === 'pendente').map((a) => a.lesson_no));
+  const aprovadas = new Set(minhas.filter((a) => a.result === 'aprovado').map((a) => a.lesson_no));
+  const novas = [];
+  for (let n = de + 1; n <= ate; n++) {
+    if (!pendentes.has(n) && !aprovadas.has(n)) novas.push(n);
+  }
+  return novas;
+}
+
 /** Licoes que o aluno reprovou, agrupadas por livro+licao, mais reprovadas primeiro. */
 function failuresOf(sid) {
   const m = new Map();
@@ -948,7 +995,6 @@ const sortByTime = (a, b) => String(a.class_time || '99').localeCompare(String(b
    5. PECAS DE UI REUTILIZAVEIS
    ========================================================================== */
 function badge(text, cls) { return h('span', { class: 'badge' + (cls ? ' ' + cls : '') }, text); }
-function resultBadge(r) { const m = RESULTS[r] || { l: r, c: '' }; return badge(m.l, m.c); }
 function statusBadge(s) { const m = SESS_ST[s] || { l: s, c: '' }; return badge(m.l, m.c); }
 
 function segmented(options, current, onPick) {
@@ -965,6 +1011,27 @@ function segmented(options, current, onPick) {
   return wrap;
 }
 function field(label, control) { return h('label', { class: 'field' }, h('span', {}, label), control); }
+
+/** Numero com - e +. No celular, subir de um em um e mais rapido do que abrir
+    o teclado, e o onChange so dispara com o valor ja inteiro (nunca no meio
+    da digitacao de "10", que passaria por "1"). */
+function stepper(valor, min, max, onChange) {
+  const input = h('input', {
+    type: 'number', inputmode: 'numeric', min, max, value: valor,
+    style: 'text-align:center;font-weight:650',
+    onchange: (e) => aplicar(parseInt(e.target.value, 10)),
+  });
+  function aplicar(n) {
+    if (!Number.isFinite(n)) n = valor;
+    valor = Math.max(min, Math.min(max, n));
+    input.value = valor;
+    onChange(valor);
+  }
+  return h('div', { class: 'row', style: 'gap:8px' },
+    h('button', { class: 'btn', type: 'button', 'aria-label': 'Uma licao a menos', onclick: () => aplicar(valor - 1) }, '\u2212'),
+    h('div', { class: 'grow' }, input),
+    h('button', { class: 'btn', type: 'button', 'aria-label': 'Uma licao a mais', onclick: () => aplicar(valor + 1) }, '+'));
+}
 function emptyState(title, msg, action) {
   return h('div', { class: 'empty' }, h('strong', {}, title), h('div', {}, msg), action ? h('div', { style: 'margin-top:12px' }, action) : null);
 }
@@ -1251,19 +1318,25 @@ function viewAluno(id) {
           h('button', { class: 'btn primary grow', onclick: () => sheetSession(st.id, null) }, 'Registrar aula'),
           h('button', { class: 'btn', onclick: () => sheetStatus(st) }, 'Status')))),
 
-    /* --- licoes pendentes --- */
+    /* --- licoes da proxima aula: da para mexer aqui mesmo --- */
     h('div', { class: 'section' },
-      sectionHead('Licoes para a proxima aula'),
+      sectionHead('Licoes para a proxima aula',
+        h('button', { class: 'btn sm', onclick: () => sheetAddLicoes(st.id) }, 'Passar licao')),
       pend.length
-        ? h('div', { class: 'card' }, pend.map((a) => h('div', { class: 'item' },
-            h('div', { class: 'row' },
-              h('div', { class: 'grow' },
-                h('div', { style: 'font-weight:600' }, lessonLabel(a)),
-                h('div', { class: 'tiny muted ellip' },
-                  bookTitle(a.book_id) + ' - passada em ' + fmtDate(a.assigned_on) +
-                  (a.attempt_no > 1 ? ' - tentativa ' + a.attempt_no : ''))),
-              resultBadge('pendente')))))
-        : emptyState('Nada pendente', 'Registre uma aula para atribuir as proximas licoes.')),
+        ? h('div', { class: 'card' }, pend
+            .slice()
+            .sort((x, y) => bookTitle(x.book_id).localeCompare(bookTitle(y.book_id)) || x.lesson_no - y.lesson_no)
+            .map((a) => h('div', { class: 'item' },
+              h('div', { class: 'row' },
+                h('div', { class: 'grow' },
+                  h('div', { style: 'font-weight:600' }, lessonLabel(a)),
+                  h('div', { class: 'tiny muted ellip' },
+                    bookTitle(a.book_id) + ' - passada em ' + fmtDate(a.assigned_on) +
+                    (a.attempt_no > 1 ? ' - tentativa ' + a.attempt_no : ''))),
+                h('button', { class: 'icon-btn', 'aria-label': 'Editar licao', onclick: () => sheetLicao(st.id, a) }, ic.edit()),
+                h('button', { class: 'icon-btn', 'aria-label': 'Tirar da lista', onclick: () => removerLicao(a) }, ic.close())))))
+        : emptyState('Nada pendente', 'Passe as licoes que o aluno deve trazer na proxima aula.',
+            h('button', { class: 'btn primary sm', onclick: () => sheetAddLicoes(st.id) }, 'Passar licao'))),
 
     /* --- livros --- */
     h('div', { class: 'section' },
@@ -1323,7 +1396,7 @@ function sessionCard(sid, s) {
 }
 
 /* ==========================================================================
-   11. SHEET: REGISTRAR / EDITAR AULA  (fluxo principal)
+   11. SHEETS: AULA E LICOES  (fluxo principal)
    ========================================================================== */
 function sheetSession(sid, existing) {
   const st = student(sid);
@@ -1332,16 +1405,34 @@ function sheetSession(sid, existing) {
     status: existing ? existing.status : 'realizada',
     notes: existing ? (existing.notes || '') : '',
   };
+  const enrolls = activeEnrollments(sid);
+  let keySeq = 1;
 
-  /* Licoes a conferir: as pendentes + as que ja foram conferidas nesta aula.
-     Exclui as licoes passadas nesta propria aula - nao se confere na mesma aula. */
-  const toReview = [
+  /* --- o que ha para conferir ---
+     As licoes pendentes de aulas anteriores, mais as que ja foram conferidas
+     nesta aula (quando se esta editando). Nao entram as passadas nesta
+     propria aula: ninguem confere na mesma aula em que passou. As adiantadas
+     ficam de fora daqui porque tem lista propria (extras). */
+  const aConferir = [
     ...DB.assignments.filter((a) =>
       a.student_id === sid && a.result === 'pendente' &&
-      !(existing && a.assigned_session_id === existing.id)),
-    ...(existing ? DB.assignments.filter((a) => a.review_session_id === existing.id && a.result !== 'pendente') : []),
+      !(existing && a.assigned_session_id === existing.id) &&
+      /* So entra o que ja tinha sido passado quando esta aula aconteceu. Uma
+         licao passada depois nao podia ter sido conferida nela - e sem isso,
+         reabrir uma aula antiga mostrava licoes que ainda nem existiam. */
+      String(a.assigned_on || '') < state.date),
+    ...(existing ? DB.assignments.filter((a) =>
+      a.review_session_id === existing.id && a.result !== 'pendente' && !a.adiantada) : []),
   ];
-  const results = new Map(toReview.map((a) => [a.id, a.result]));
+  const results = new Map(aConferir.map((a) => [a.id, a.result]));
+
+  /* Licoes que o aluno estudou por conta, alem do que foi passado. Nascem do
+     controle "ate onde o aluno chegou" e ja nascem conferidas nesta aula. */
+  const extras = existing
+    ? DB.assignments
+        .filter((a) => a.review_session_id === existing.id && a.adiantada)
+        .map((a) => ({ key: a.id, id: a.id, book_id: a.book_id, lesson_no: a.lesson_no, result: a.result }))
+    : [];
 
   /* Licoes passadas para a proxima aula. */
   const nextItems = existing
@@ -1349,76 +1440,171 @@ function sheetSession(sid, existing) {
         .map((a) => ({ key: a.id, id: a.id, book_id: a.book_id, lesson_no: a.lesson_no, lesson_label: a.lesson_label || '' }))
     : [];
   const removedIds = [];
-  let keySeq = 1;
 
-  const enrolls = activeEnrollments(sid);
-  const reviewBox = h('div', {});
+  /* Ate onde o aluno chegou, por livro. Comeca na ultima licao que ja estava
+     em jogo - ou seja, "chegou exatamente ate onde foi passado". */
+  /** Onde o aluno estava neste livro quando esta aula comecou. */
+  function partidaDe(bid) {
+    const naLista = aConferir.filter((a) => a.book_id === bid).map((a) => a.lesson_no);
+    return (naLista.length ? Math.min(...naLista) : suggestNextLesson(sid, bid)) - 1;
+  }
+
+  const ate = new Map();
+  for (const en of enrolls) {
+    const emJogo = [
+      ...aConferir.filter((a) => a.book_id === en.book_id).map((a) => a.lesson_no),
+      ...extras.filter((e) => e.book_id === en.book_id).map((e) => e.lesson_no),
+    ];
+    ate.set(en.book_id, emJogo.length ? Math.max(...emJogo) : partidaDe(en.book_id));
+  }
+
+  const ateBox = h('div', {});
+  const conferirBox = h('div', {});
   const nextBox = h('div', {});
   const addBox = h('div', {});
   const bodyWrap = h('div', {});
 
-  /* ---- lista "conferir licoes" ---- */
-  function drawReview() {
-    reviewBox.textContent = '';
-    if (state.status !== 'realizada') {
-      append(reviewBox, [h('p', { class: 'small muted' },
-        'Aula nao realizada: as licoes pendentes continuam pendentes para a proxima aula.')]);
+  /* ======================================================================
+     ATE ONDE O ALUNO CHEGOU
+     ====================================================================== */
+  function aplicarAte(bid, valor) {
+    ate.set(bid, valor);
+    /* Tudo ate onde ele chegou conta como estudado: o que ja estava na lista
+       vira aprovado, e o que nem tinha sido passado nasce aqui ja aprovado.
+       Depois se muda uma a uma o que nao foi bem. */
+    for (const a of aConferir) {
+      if (a.book_id === bid && a.lesson_no <= valor) results.set(a.id, 'aprovado');
+    }
+    for (let i = extras.length - 1; i >= 0; i--) {
+      if (extras[i].book_id === bid && extras[i].lesson_no > valor) extras.splice(i, 1);
+    }
+    const jaTem = new Set(extras.filter((e) => e.book_id === bid).map((e) => e.lesson_no));
+    for (const n of faixaEstudada(sid, bid, partidaDe(bid), valor)) {
+      if (!jaTem.has(n)) {
+        extras.push({ key: 'e' + (keySeq++), id: null, book_id: bid, lesson_no: n, result: 'aprovado' });
+      }
+    }
+    extras.sort((x, y) => x.lesson_no - y.lesson_no);
+    drawConferir();
+  }
+
+  function drawAte() {
+    ateBox.textContent = '';
+    if (!enrolls.length) {
+      append(ateBox, [h('p', { class: 'small muted' },
+        'Este aluno nao tem livro ativo. Adicione um livro na ficha dele para registrar licoes.')]);
       return;
     }
-    if (!toReview.length) {
-      append(reviewBox, [h('p', { class: 'small muted' }, 'Nenhuma licao pendente para conferir.')]);
+    append(ateBox, enrolls.map((en) => {
+      const b = book(en.book_id);
+      const partida = partidaDe(en.book_id);
+      const resumo = h('div', { class: 'tiny muted', style: 'margin-top:8px' });
+      const pinta = (v) => {
+        resumo.textContent = v <= partida
+          ? 'Nada estudado neste livro nesta aula.'
+          : (v === partida + 1
+              ? 'Marca a licao ' + v + ' como aprovada.'
+              : 'Marca as licoes ' + (partida + 1) + ' a ' + v + ' como aprovadas.') +
+            ' Ajuste abaixo o que nao foi bem.';
+      };
+      pinta(ate.get(en.book_id));
+      return h('div', { class: 'item' },
+        h('div', { class: 'row', style: 'margin-bottom:8px' },
+          h('div', { class: 'grow ellip', style: 'font-weight:600' }, bookTitle(en.book_id)),
+          h('span', { class: 'tiny muted' }, partida > 0 ? 'vinha da ' + partida : 'inicio do livro')),
+        stepper(ate.get(en.book_id), partida, b ? b.lesson_count : 999,
+          (v) => { aplicarAte(en.book_id, v); pinta(v); }),
+        resumo);
+    }));
+  }
+
+  /* ======================================================================
+     CONFERIR
+     ====================================================================== */
+  function drawConferir() {
+    conferirBox.textContent = '';
+    const linhas = [
+      ...aConferir.map((a) => ({
+        book_id: a.book_id, lesson_no: a.lesson_no,
+        titulo: lessonLabel(a),
+        sub: bookTitle(a.book_id) + ' - passada em ' + fmtDate(a.assigned_on) +
+             (a.attempt_no > 1 ? ' - tentativa ' + a.attempt_no : ''),
+        valor: results.get(a.id),
+        set: (v) => results.set(a.id, v),
+        adiantou: false,
+      })),
+      ...extras.map((e) => ({
+        book_id: e.book_id, lesson_no: e.lesson_no,
+        titulo: 'Licao ' + e.lesson_no,
+        sub: bookTitle(e.book_id),
+        valor: e.result,
+        set: (v) => { e.result = v; },
+        adiantou: true,
+      })),
+    ].sort((x, y) => bookTitle(x.book_id).localeCompare(bookTitle(y.book_id)) || x.lesson_no - y.lesson_no);
+
+    if (!linhas.length) {
+      append(conferirBox, [h('p', { class: 'small muted' },
+        'Nenhuma licao para conferir. Use o controle acima se o aluno estudou por conta.')]);
       return;
     }
-    append(reviewBox, toReview.map((a) => h('div', { class: 'item' },
-      h('div', { style: 'font-weight:600' }, lessonLabel(a)),
-      h('div', { class: 'tiny muted', style: 'margin-bottom:8px' },
-        bookTitle(a.book_id) + ' - passada em ' + fmtDate(a.assigned_on) +
-        (a.attempt_no > 1 ? ' - tentativa ' + a.attempt_no : '')),
+    append(conferirBox, linhas.map((l) => h('div', { class: 'item' },
+      h('div', { class: 'row', style: 'margin-bottom:6px' },
+        h('div', { class: 'grow' },
+          h('div', { style: 'font-weight:600' }, l.titulo),
+          h('div', { class: 'tiny muted ellip' }, l.sub)),
+        l.adiantou ? badge('adiantou', 'info') : null),
       segmented(
         [['aprovado', 'Aprovado'], ['reprovado', 'Reprovado'], ['revisar', 'Revisar'],
          ['nao_trouxe', 'Nao trouxe'], ['pendente', 'Deixar pendente']],
-        results.get(a.id),
+        l.valor,
         (v) => {
-          results.set(a.id, v);
-          /* Reprovou ou revisar: ja sugere repetir a mesma licao na proxima aula. */
-          if (v === 'reprovado' || v === 'revisar') addNextItem(a.book_id, a.lesson_no, a.lesson_label || '', true);
-          drawNext();
+          l.set(v);
+          /* Reprovou ou revisar: ja sugere repetir a mesma licao na proxima. */
+          if (v === 'reprovado' || v === 'revisar') { addNextItem(l.book_id, l.lesson_no, '', true); drawNext(); }
         }))));
   }
 
-  /* ---- lista "licoes da proxima aula" ---- */
-  function addNextItem(book_id, lesson_no, lesson_label, silent) {
+  /* ======================================================================
+     PROXIMA AULA
+     ====================================================================== */
+  function addNextItem(book_id, lesson_no, lesson_label, silencioso) {
     if (nextItems.some((it) => it.book_id === book_id && it.lesson_no === lesson_no)) {
-      if (!silent) toast('Essa licao ja esta na lista.');
-      return;
+      if (!silencioso) toast('Licao ' + lesson_no + ' ja esta na lista.');
+      return false;
     }
-    nextItems.push({ key: 'n' + keySeq++, id: null, book_id, lesson_no, lesson_label: lesson_label || '' });
+    nextItems.push({ key: 'n' + (keySeq++), id: null, book_id, lesson_no, lesson_label: lesson_label || '' });
+    return true;
   }
+
   function drawNext() {
     nextBox.textContent = '';
     if (!nextItems.length) {
-      append(nextBox, [h('p', { class: 'small muted' }, 'Nenhuma licao adicionada ainda.')]);
+      append(nextBox, [h('p', { class: 'small muted' }, 'Nenhuma licao para a proxima aula ainda.')]);
       return;
     }
-    append(nextBox, nextItems.map((it) => h('div', { class: 'item' },
-      h('div', { class: 'row' },
-        h('div', { class: 'grow' },
-          h('div', { style: 'font-weight:600' }, it.lesson_label || ('Licao ' + it.lesson_no)),
-          h('div', { class: 'tiny muted ellip' },
-            bookTitle(it.book_id) +
-            (attemptsFor(sid, it.book_id, it.lesson_no) && !it.id
-              ? ' - tentativa ' + (attemptsFor(sid, it.book_id, it.lesson_no) + 1) : ''))),
-        h('button', {
-          class: 'icon-btn', 'aria-label': 'Remover',
-          onclick: () => {
-            if (it.id) removedIds.push(it.id);
-            nextItems.splice(nextItems.indexOf(it), 1);
-            drawNext();
-          },
-        }, ic.close())))));
+    append(nextBox, nextItems
+      .slice()
+      .sort((x, y) => bookTitle(x.book_id).localeCompare(bookTitle(y.book_id)) || x.lesson_no - y.lesson_no)
+      .map((it) => h('div', { class: 'item' },
+        h('div', { class: 'row' },
+          h('div', { class: 'grow' },
+            h('div', { style: 'font-weight:600' }, it.lesson_label || ('Licao ' + it.lesson_no)),
+            h('div', { class: 'tiny muted ellip' },
+              bookTitle(it.book_id) +
+              (!it.id && attemptsFor(sid, it.book_id, it.lesson_no)
+                ? ' - tentativa ' + (attemptsFor(sid, it.book_id, it.lesson_no) + 1) : ''))),
+          h('button', {
+            class: 'icon-btn', 'aria-label': 'Tirar da lista',
+            onclick: () => {
+              if (it.id) removedIds.push(it.id);
+              nextItems.splice(nextItems.indexOf(it), 1);
+              drawNext();
+            },
+          }, ic.close())))));
   }
 
-  /* Sugestao de proxima licao considerando tambem o que ja foi adicionado agora. */
+  /* Sugestao considerando tambem o que ja foi adicionado agora nesta folha. */
   function localSuggest(bid) {
     const b = book(bid);
     if (!b) return 1;
@@ -1426,47 +1612,72 @@ function sheetSession(sid, existing) {
       .filter((a) => a.student_id === sid && a.book_id === bid &&
                      (a.result === 'aprovado' || a.result === 'pendente'))
       .map((a) => a.lesson_no));
+    for (const e of extras) if (e.book_id === bid && e.result === 'aprovado') taken.add(e.lesson_no);
     for (const it of nextItems) if (it.book_id === bid) taken.add(it.lesson_no);
     for (let i = 1; i <= b.lesson_count; i++) if (!taken.has(i)) return i;
     return b.lesson_count;
   }
 
-  /* ---- formulario de adicionar licao ---- */
   function drawAdd() {
     addBox.textContent = '';
-    if (!enrolls.length) {
-      append(addBox, [h('p', { class: 'small muted' },
-        'Este aluno nao tem livro ativo. Adicione um livro na tela do aluno para poder atribuir licoes.')]);
-      return;
-    }
+    if (!enrolls.length) return;
     let bid = enrolls[0].book_id;
-    const lessonInput = h('input', {
-      type: 'number', min: 1, inputmode: 'numeric', value: localSuggest(bid),
+    const campo = h('input', {
+      type: 'text', inputmode: 'numeric', value: String(localSuggest(bid)),
+      placeholder: 'ex: 11-13',
     });
-    const labelInput = h('input', { type: 'text', placeholder: 'Rotulo opcional (ex: pag. 42)' });
     const bookSel = h('select', {
-      onchange: (e) => { bid = e.target.value; lessonInput.value = localSuggest(bid); },
+      onchange: (e) => { bid = e.target.value; campo.value = String(localSuggest(bid)); },
     }, enrolls.map((en) => h('option', { value: en.book_id }, bookTitle(en.book_id))));
 
     append(addBox, [
-      field('Livro', bookSel),
-      h('div', { class: 'grid2' },
-        field('Licao n.', lessonInput),
-        field('Rotulo', labelInput)),
+      enrolls.length > 1 ? field('Livro', bookSel) : null,
+      field('Licoes', campo),
+      h('p', { class: 'tiny muted', style: 'margin:-6px 0 10px' },
+        'Uma ("11"), uma faixa ("11-13") ou varias ("11,12,15").'),
       h('button', {
         class: 'btn block', onclick: () => {
-          const n = parseInt(lessonInput.value, 10);
           const b = book(bid);
-          if (!n || n < 1) return toast('Numero de licao invalido.', true);
-          if (b && n > b.lesson_count) return toast('O livro tem ' + b.lesson_count + ' licoes.', true);
-          addNextItem(bid, n, labelInput.value.trim());
-          labelInput.value = '';
+          const pedidas = parseLicoes(campo.value);
+          if (!pedidas) return toast('Nao entendi. Use 11, 11-13 ou 11,12,15.', true);
+          const validas = pedidas.filter((n) => !b || n <= b.lesson_count);
+          if (!validas.length) return toast('O livro tem ' + (b ? b.lesson_count : 0) + ' licoes.', true);
+          let n = 0;
+          for (const x of validas) if (addNextItem(bid, x, '')) n++;
           drawNext();
-          lessonInput.value = localSuggest(bid);
+          campo.value = String(localSuggest(bid));
+          if (!n) return toast('Essas licoes ja estao na lista.');
+          toast(plural(n, 'licao adicionada', 'licoes adicionadas') +
+                (validas.length < pedidas.length ? ' (o livro termina na ' + b.lesson_count + ')' : ''));
         },
-      }, 'Adicionar licao'),
+      }, 'Adicionar'),
     ]);
   }
+
+  /* ======================================================================
+     MONTAGEM
+     ====================================================================== */
+  const passoEstudo = h('div', {},
+    h('hr', { class: 'sep' }),
+    h('h3', { style: 'margin-bottom:4px' }, 'Ate onde o aluno chegou'),
+    h('p', { class: 'tiny muted', style: 'margin:0 0 10px' },
+      'Suba ate a ultima licao que ele estudou, mesmo alem do que voce passou.'),
+    ateBox,
+    h('hr', { class: 'sep' }),
+    h('h3', { style: 'margin-bottom:8px' }, 'Conferir'),
+    conferirBox,
+    h('hr', { class: 'sep' }),
+    h('h3', { style: 'margin-bottom:8px' }, 'Passar para a proxima aula'),
+    nextBox,
+    h('div', { style: 'margin-top:12px' }, addBox));
+
+  function toggleEstudo() {
+    passoEstudo.hidden = state.status !== 'realizada';
+    naoRealizada.hidden = state.status === 'realizada';
+  }
+
+  const naoRealizada = h('p', { class: 'small muted', style: 'margin-top:14px' },
+    'Aula nao realizada: as licoes pendentes continuam pendentes para a proxima aula.');
 
   function drawBody() {
     bodyWrap.textContent = '';
@@ -1479,34 +1690,24 @@ function sheetSession(sid, existing) {
         [['realizada', 'Realizada'], ['falta_aluno', 'Aluno faltou'],
          ['cancelada', 'Cancelada'], ['sem_aula', 'Sem aula']],
         state.status,
-        (v) => { state.status = v; drawReview(); toggleNextVisibility(); })),
-      h('hr', { class: 'sep' }),
-      h('h3', { style: 'margin-bottom:8px' }, 'Conferir licoes da aula anterior'),
-      reviewBox,
-      nextSection,
+        (v) => { state.status = v; toggleEstudo(); })),
+      naoRealizada,
+      passoEstudo,
       h('hr', { class: 'sep' }),
       field('Observacoes', h('textarea', {
         placeholder: 'Anotacoes da aula...', value: state.notes,
         oninput: (e) => { state.notes = e.target.value; },
       })),
     ]);
-    drawReview();
+    drawAte();
+    drawConferir();
     drawNext();
     drawAdd();
-    toggleNextVisibility();
+    toggleEstudo();
   }
 
-  const nextSection = h('div', {},
-    h('hr', { class: 'sep' }),
-    h('h3', { style: 'margin-bottom:8px' }, 'Licoes para a proxima aula'),
-    nextBox,
-    h('div', { style: 'margin-top:12px' }, addBox));
-
-  function toggleNextVisibility() {
-    nextSection.hidden = state.status !== 'realizada';
-  }
-
-  const saveBtn = h('button', { class: 'btn primary', onclick: save }, existing ? 'Salvar alteracoes' : 'Registrar aula');
+  const saveBtn = h('button', { class: 'btn primary', onclick: save },
+    existing ? 'Salvar alteracoes' : 'Registrar aula');
   const footer = [h('button', { class: 'btn', onclick: () => close() }, 'Cancelar'), saveBtn];
   if (existing) {
     footer.unshift(h('button', {
@@ -1517,7 +1718,9 @@ function sheetSession(sid, existing) {
           'Excluir')) return;
         try {
           for (const a of DB.assignments.filter((x) => x.review_session_id === existing.id)) {
-            await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
+            /* As adiantadas so existem por causa desta aula: somem com ela. */
+            if (a.adiantada) await sbDelete('assignments', a.id);
+            else await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
           }
           for (const a of DB.assignments.filter((x) => x.assigned_session_id === existing.id)) {
             await sbDelete('assignments', a.id);
@@ -1544,7 +1747,7 @@ function sheetSession(sid, existing) {
       }
 
       if (state.status === 'realizada') {
-        for (const a of toReview) {
+        for (const a of aConferir) {
           const r = results.get(a.id) || 'pendente';
           if (r === 'pendente') {
             if (a.result !== 'pendente') {
@@ -1554,6 +1757,23 @@ function sheetSession(sid, existing) {
             await sbUpdate('assignments', a.id, { result: r, review_session_id: sess.id, reviewed_on: state.date });
           }
         }
+
+        /* Licoes adiantadas: nascem ja conferidas nesta aula. Se voce deixar
+           uma como pendente, ela vira uma licao normal para a proxima. */
+        for (const e of extras) {
+          const conferida = {
+            result: e.result,
+            review_session_id: e.result === 'pendente' ? null : sess.id,
+            reviewed_on: e.result === 'pendente' ? null : state.date,
+          };
+          if (e.id) { await sbUpdate('assignments', e.id, conferida); continue; }
+          await sbInsert('assignments', Object.assign({
+            student_id: sid, book_id: e.book_id, lesson_no: e.lesson_no, lesson_label: null,
+            assigned_session_id: null, assigned_on: state.date, adiantada: true,
+            attempt_no: attemptsFor(sid, e.book_id, e.lesson_no) + 1,
+          }, conferida));
+        }
+
         for (const it of nextItems) {
           if (it.id) continue;
           await sbInsert('assignments', {
@@ -1564,16 +1784,26 @@ function sheetSession(sid, existing) {
           });
         }
       } else if (existing) {
-        /* Aula deixou de ser "realizada": o que foi conferido nela volta a pendente. */
+        /* Aula deixou de ser "realizada": o que foi conferido nela se desfaz. */
         for (const a of DB.assignments.filter((x) => x.review_session_id === existing.id)) {
-          await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
+          if (a.adiantada) await sbDelete('assignments', a.id);
+          else await sbUpdate('assignments', a.id, { result: 'pendente', review_session_id: null, reviewed_on: null });
         }
       }
+
       for (const id of removedIds) await sbDelete('assignments', id);
+
+      /* Adiantadas que sairam ao baixar o "ate onde chegou". */
+      if (existing) {
+        const ficaram = new Set(extras.filter((e) => e.id).map((e) => e.id));
+        for (const a of DB.assignments.filter((x) => x.review_session_id === existing.id && x.adiantada)) {
+          if (!ficaram.has(a.id)) await sbDelete('assignments', a.id);
+        }
+      }
 
       close();
       await reload();
-      toast('Aula registrada.');
+      toast(existing ? 'Aula atualizada.' : 'Aula registrada.');
     } catch (e) {
       toast(e.message || 'Falha ao salvar', true);
       busy(saveBtn, false);
@@ -1586,6 +1816,136 @@ function sheetSession(sid, existing) {
     body: bodyWrap,
     footer,
   });
+}
+
+/* --------------------------------------------------------------------------
+   LICOES FORA DA AULA
+
+   Antes, mexer numa licao da proxima aula so era possivel reabrindo a aula que
+   a passou: ficha do aluno, rolar ate o historico, achar o cartao certo, lapis,
+   rolar dentro da folha. As duas folhas abaixo cortam esse caminho - a licao
+   passa a ser editavel direto na ficha do aluno.
+   -------------------------------------------------------------------------- */
+
+/** Passa licoes para a proxima aula sem precisar abrir aula nenhuma. */
+function sheetAddLicoes(sid) {
+  const enrolls = activeEnrollments(sid);
+  if (!enrolls.length) {
+    const fechar = openSheet({
+      title: 'Passar licoes',
+      body: h('p', { class: 'small muted' },
+        'Este aluno ainda nao tem livro ativo. Adicione um livro na ficha dele para poder passar licoes.'),
+      footer: [h('button', { class: 'btn primary', onclick: () => fechar() }, 'Entendi')],
+    });
+    return;
+  }
+
+  let bid = enrolls[0].book_id;
+  const campo = h('input', {
+    type: 'text', inputmode: 'numeric', value: String(suggestNextLesson(sid, bid)),
+    placeholder: 'ex: 11-13',
+  });
+  const bookSel = h('select', {
+    onchange: (e) => { bid = e.target.value; campo.value = String(suggestNextLesson(sid, bid)); },
+  }, enrolls.map((en) => h('option', { value: en.book_id }, bookTitle(en.book_id))));
+  const btn = h('button', { class: 'btn primary', onclick: salvar }, 'Adicionar');
+
+  async function salvar() {
+    const b = book(bid);
+    const pedidas = parseLicoes(campo.value);
+    if (!pedidas) return toast('Nao entendi. Use 11, 11-13 ou 11,12,15.', true);
+    const validas = pedidas.filter((n) => !b || n <= b.lesson_count);
+    if (!validas.length) return toast('O livro tem ' + (b ? b.lesson_count : 0) + ' licoes.', true);
+    const jaTem = new Set(DB.assignments
+      .filter((a) => a.student_id === sid && a.book_id === bid && a.result === 'pendente')
+      .map((a) => a.lesson_no));
+    const novas = validas.filter((n) => !jaTem.has(n));
+    if (!novas.length) return toast('Essas licoes ja estao na lista.');
+
+    busy(btn, true);
+    try {
+      for (const n of novas) {
+        await sbInsert('assignments', {
+          student_id: sid, book_id: bid, lesson_no: n, lesson_label: null,
+          assigned_session_id: null, assigned_on: todayISO(), result: 'pendente',
+          attempt_no: attemptsFor(sid, bid, n) + 1,
+        });
+      }
+      fechar();
+      await reload();
+      toast(plural(novas.length, 'licao passada', 'licoes passadas'));
+    } catch (e) { toast(e.message || 'Falha ao salvar', true); busy(btn, false); }
+  }
+
+  const fechar = openSheet({
+    title: 'Licoes para a proxima aula',
+    body: h('div', {},
+      enrolls.length > 1 ? field('Livro', bookSel) : null,
+      field('Licoes', campo),
+      h('p', { class: 'tiny muted', style: 'margin-top:-4px' },
+        'Uma ("11"), uma faixa ("11-13") ou varias ("11,12,15").')),
+    footer: [h('button', { class: 'btn', onclick: () => fechar() }, 'Cancelar'), btn],
+  });
+}
+
+/** Muda o livro, o numero ou o rotulo de uma licao que ja esta na lista. */
+function sheetLicao(sid, a) {
+  const f = { book_id: a.book_id, lesson_no: a.lesson_no, lesson_label: a.lesson_label || '' };
+  const enrolls = activeEnrollments(sid);
+  const opcoes = enrolls.some((en) => en.book_id === a.book_id)
+    ? enrolls
+    : [...enrolls, { book_id: a.book_id }];
+  const btn = h('button', { class: 'btn primary', onclick: salvar }, 'Salvar');
+
+  async function salvar() {
+    const b = book(f.book_id);
+    if (!f.lesson_no || f.lesson_no < 1) return toast('Numero de licao invalido.', true);
+    if (b && f.lesson_no > b.lesson_count) return toast('O livro tem ' + b.lesson_count + ' licoes.', true);
+    busy(btn, true);
+    try {
+      await sbUpdate('assignments', a.id, {
+        book_id: f.book_id, lesson_no: f.lesson_no, lesson_label: f.lesson_label.trim() || null,
+      });
+      fechar();
+      await reload();
+      toast('Licao atualizada.');
+    } catch (e) { toast(e.message || 'Falha ao salvar', true); busy(btn, false); }
+  }
+
+  const fechar = openSheet({
+    title: 'Editar licao',
+    body: h('div', {},
+      opcoes.length > 1
+        ? field('Livro', h('select', { onchange: (e) => { f.book_id = e.target.value; } },
+            opcoes.map((en) => h('option',
+              { value: en.book_id, selected: en.book_id === f.book_id }, bookTitle(en.book_id)))))
+        : null,
+      h('div', { class: 'grid2' },
+        field('Licao n.', h('input', {
+          type: 'number', min: 1, inputmode: 'numeric', value: f.lesson_no,
+          oninput: (e) => { f.lesson_no = parseInt(e.target.value, 10); },
+        })),
+        field('Rotulo', h('input', {
+          type: 'text', value: f.lesson_label, placeholder: 'ex: pag. 42',
+          oninput: (e) => { f.lesson_label = e.target.value; },
+        }))),
+      h('button', {
+        class: 'btn danger block', style: 'margin-top:4px',
+        onclick: async () => { fechar(); await removerLicao(a); },
+      }, 'Tirar da lista')),
+    footer: [h('button', { class: 'btn', onclick: () => fechar() }, 'Cancelar'), btn],
+  });
+}
+
+async function removerLicao(a) {
+  if (!await confirmSheet('Tirar da lista?',
+    lessonLabel(a) + ' de ' + bookTitle(a.book_id) + ' sai das licoes da proxima aula.',
+    'Tirar')) return;
+  try {
+    await sbDelete('assignments', a.id);
+    await reload();
+    toast('Licao removida.');
+  } catch (e) { toast(e.message || 'Falha ao remover', true); }
 }
 
 /* ==========================================================================
