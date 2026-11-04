@@ -1,18 +1,3 @@
-# Backups exportados pelo app - contem dados pessoais de alunos, nunca versionar
-backup-alunos-*.json
-
-# Dependencias
-node_modules/
-
-# Vercel: link do projeto e variaveis de ambiente locais
-.vercel/
-.env
-.env.*.local
-
-# Logs
-*.log
-
-# Sistema
-Thumbs.db
-desktop.ini
-.DS_Store
+node_modules
+.vercel
+.env*

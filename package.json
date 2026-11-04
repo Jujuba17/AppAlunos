@@ -1,10 +1,8 @@
 {
-  "name": "acompanhamento-alunos",
+  "name": "app-alunos",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "description": "App de acompanhamento de aulas semanais, licoes e reprovacoes",
   "dependencies": {
-    "@vercel/blob": "^2.8.0"
+    "@upstash/redis": "^1.34.0"
   }
 }
