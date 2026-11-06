@@ -2,7 +2,14 @@
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Teoria Musical</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7c3aed">
+<link rel="icon" type="image/png" href="icons/icon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Teoria Musical">
 <style>
+.install{border-color:var(--ac);border-width:2px}
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#faf8f5;--fg:#2a2622;--card:#fff;--mut:#7a726a;--ac:#7c3aed;--ok:#16a34a;--bad:#dc2626;--bd:#e5ded5}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1a18;--fg:#f1ece6;--card:#292623;--mut:#a69d93;--ac:#a78bfa;--ok:#4ade80;--bad:#f87171;--bd:#3d3834}}
 :root[data-theme="dark"]{--bg:#1c1a18;--fg:#f1ece6;--card:#292623;--mut:#a69d93;--ac:#a78bfa;--ok:#4ade80;--bad:#f87171;--bd:#3d3834}
@@ -19,6 +26,10 @@ h1{font-size:22px;margin:0 0 2px}h2{font-size:18px;margin:18px 0 8px}
 button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 14px;cursor:pointer}
 button.pri{background:var(--ac);color:#fff;border-color:var(--ac)}
 .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:10px}
+.opts.col{grid-template-columns:1fr}.opts.col button{text-align:left}
+h3{font-size:16px;margin:14px 0 6px}
+details summary{cursor:pointer;color:var(--ac);font-size:14px;margin:6px 0}
+ol.gab{padding-left:22px;font-size:14px}ol.gab li{margin:4px 0}
 .opts button.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
 .opts button.bad{background:var(--bad);color:#fff;border-color:var(--bad)}
 .tabs{display:flex;gap:8px;margin:12px 0}.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
@@ -29,17 +40,29 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;b
 input[type=text],input[type=number]{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px;max-width:100%}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:9;max-width:90%}
 label{display:inline-flex;gap:4px;align-items:center;margin-right:8px;font-size:13px}
+/* trilha de notas */
+.unit{background:var(--ac);color:#fff;border-radius:14px;padding:10px 14px;margin:22px 0 6px;font-weight:700}
+.unit .mut{color:#fff;opacity:.85}
+.node-row{display:flex;flex-direction:column;align-items:center;width:fit-content;max-width:100%;margin:16px auto;text-align:center}
+.node{width:70px;height:70px;border-radius:50%;font-size:24px;font-weight:700;border:none;padding:0;box-shadow:0 5px 0 rgba(0,0,0,.25)}
+.node.done{background:var(--ok);color:#fff}
+.node.cur{background:var(--ac);color:#fff;animation:pulse 1.6s ease-in-out infinite}
+.node.lock{background:var(--bd);color:var(--mut);cursor:default;box-shadow:none}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.node-lbl{max-width:230px;margin-top:8px;font-size:14px}
+.qbar{height:10px;background:var(--bd);border-radius:9px;overflow:hidden;margin:8px 0 4px}.qbar i{display:block;height:100%;background:var(--ok);transition:width .3s}
 </style></head><body><main id="app">Carregando…</main><div id="toast"></div>
 <script>
 const N=['Dó','Ré','Mi','Fá','Sol','Lá','Si'];
 const MODS={
- notas_sol:{t:'Notas na clave de Sol',d:'Dó a Sol, com linhas suplementares'},
- notas_fa:{t:'Notas na clave de Fá',d:'Leitura na pauta da clave de Fá'},
- figuras:{t:'Figuras musicais',d:'Nome e valor (em tempos) de cada figura'},
- compasso:{t:'Compasso simples',d:'Unidade de tempo e de compasso, quantas figuras cabem'},
- simbolos:{t:'Símbolos musicais',d:'Claves, fermata, ligadura, ponto de aumento, acidentes'},
- compasso_composto:{t:'Compasso composto',d:'6/8, 9/8, 12/8: tempos e figuras pontuadas'}};
+ notas:{t:'Notas musicais',d:'Clave de Sol, clave de Fá e desafios',i:'🎵'},
+ figuras:{t:'Figuras musicais',d:'Nome, valor, comparação e ponto de aumento',i:'🎶'},
+ compasso:{t:'Compasso',d:'Compasso simples e composto',i:'🥁'},
+ simbolos:{t:'Símbolos musicais',d:'Claves, acidentes, fermata, ligadura e ponto',i:'🔣'}};
 const KEYS=Object.keys(MODS);
+// módulos antigos que agora são parte de uma trilha
+const ALIAS={notas_sol:'notas',notas_fa:'notas',compasso_composto:'compasso'};
+const normU=u=>[...new Set((u||['notas']).map(m=>ALIAS[m]||m))];
 const md=(a,b)=>((a%b)+b)%b, rnd=a=>a[Math.floor(Math.random()*a.length)];
 const shuf=a=>a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -75,62 +98,146 @@ const SYM=[
  {n:'Sustenido',d:'Sobe a nota meio tom.',svg:G('\u266F',80,75)},
  {n:'Bemol',d:'Desce a nota meio tom.',svg:G('\u266D',80,75)},
  {n:'Bequadro',d:'Cancela um sustenido ou bemol anterior.',svg:G('\u266E',80,75)}];
-function genS(){const S=rnd(SYM);const o=shuf([...shuf(SYM.map(x=>x.n).filter(x=>x!=S.n)).slice(0,3),S.n]);
+function genS(list){list=list||SYM;const S=rnd(list);const o=shuf([...shuf(list.map(x=>x.n).filter(x=>x!=S.n)).slice(0,3),S.n]);
  if(Math.random()<.5)return{svg:S.svg,text:'Qual é o nome deste símbolo?',opts:o,ans:o.indexOf(S.n),tag:S.n};
  return{text:'Que símbolo é este? '+S.d,opts:o,ans:o.indexOf(S.n),tag:S.n};}
+const symL=(...ns)=>SYM.filter(s=>ns.includes(s.n));
 
-const FIG={w:['Semibreve',4],h:['Mínima',2],q:['Semínima',1],e:['Colcheia','1/2'],s:['Semicolcheia','1/4']};
+/* ---------- notas ---------- */
+// Posição na pauta: 0 = 1ª linha, 1 = 1º espaço, 2 = 2ª linha ... 8 = 5ª linha; negativos e >8 usam linhas suplementares.
 let lastN=null;
-function gen(m){
- if(m=='simbolos')return genS();
- if(m=='notas_sol'||m=='notas_fa'){
-  let n;do{n=Math.floor(Math.random()*12)-2}while(n===lastN);lastN=n;
-  const sol=m=='notas_sol',i=md(n+(sol?2:4),7);
-  return{svg:staff(sol?'sol':'fa',n),text:'Qual é o nome desta nota?',opts:N,ans:i,tag:(sol?'Sol':'Fá')+' · '+N[i]};
- }
- if(m=='figuras'){
-  const t=rnd(Object.keys(FIG));
-  if(Math.random()<.5)return{svg:staff(null,1,t),text:'Qual é o nome desta figura?',opts:Object.values(FIG).map(f=>f[0]),ans:Object.keys(FIG).indexOf(t),tag:FIG[t][0]};
-  const vals=['4','2','1','1/2','1/4'];
-  return{svg:staff(null,1,t),text:`Quantos tempos vale esta figura? (unidade de tempo: semínima)`,opts:vals,ans:vals.indexOf(String(FIG[t][1])),tag:'Valor: '+FIG[t][0]};
- }
- if(m=='compasso_composto')return genC();
- const r=Math.random();
- if(r<.3){const c=rnd([[2,4],[3,4],[4,4],[3,8],[2,2]]);const o=['2','3','4','6'];
-  return{text:`No compasso ${c[0]}/${c[1]}, quantos tempos há em cada compasso?`,fm:c,opts:o,ans:o.indexOf(String(c[0]))};}
- if(r<.55){const c=rnd([[2,2],[3,4],[4,4],[3,8]]);const o=['Semibreve','Mínima','Semínima','Colcheia'];
-  const a={2:'Mínima',4:'Semínima',8:'Colcheia'}[c[1]];
-  return{text:`No compasso ${c[0]}/${c[1]}, qual figura é a unidade de tempo (vale 1 tempo)?`,fm:c,opts:o,ans:o.indexOf(a)};}
- if(r<.62){const c=rnd([[2,4],[3,4],[4,4],[2,2],[3,8]]);const o=['Semibreve','Mínima','Mínima pontuada','Semínima pontuada'];const a={'2/4':'Mínima','3/4':'Mínima pontuada','4/4':'Semibreve','2/2':'Semibreve','3/8':'Semínima pontuada'}[c.join('/')];
-  return{text:`No compasso ${c[0]}/${c[1]}, qual figura é a unidade de compasso (preenche o compasso inteiro)?`,opts:o,ans:o.indexOf(a)};}
- if(r<.65){const o=['Quantidade de tempos por compasso','Figura que vale um tempo','Andamento da música','Altura da nota'];
-  return{text:'Na fórmula de compasso, o número de cima indica:',opts:o,ans:0};}
- if(r<.75){const o=['Quantidade de tempos por compasso','Figura que vale um tempo','Andamento da música','Altura da nota'];
-  return{text:'Na fórmula de compasso, o número de baixo indica:',opts:o,ans:1};}
- const cs=[[2,4,'Semínima',.25],[3,4,'Semínima',.25],[4,4,'Semínima',.25],[4,4,'Mínima',.5],[2,4,'Colcheia',.125],[3,4,'Colcheia',.125],[3,8,'Colcheia',.125],[2,2,'Mínima',.5],[3,4,'Mínima',.5]];
- const c=rnd(cs),a=(c[0]/c[1])/c[3];if(!Number.isInteger(a))return gen(m);
- const o=shuf([...new Set([a,a+1,Math.max(1,a-1),a*2])]).slice(0,4);if(!o.includes(a))o[0]=a;
- return{text:`Quantas ${c[2].toLowerCase()}s cabem em um compasso ${c[0]}/${c[1]}?`,opts:o.map(String),ans:o.indexOf(a)};
+const R=(a,b)=>Array.from({length:b-a+1},(_,i)=>a+i);
+const pos=n=>n%2==0?(n/2+1)+'ª linha':((n-1)/2+1)+'º espaço';
+function genLvl(L){
+ const sol=L.c=='sol'||(L.c=='mix'&&Math.random()<.5),cl=sol?'Sol':'Fá',nm=i=>N[md(i+(sol?2:4),7)];
+ let n;do{n=rnd(L.ns)}while(n===lastN&&L.ns.length>1);lastN=n;
+ if((L.k=='onde'||(L.k=='mix'&&Math.random()<.3))&&n>=0&&n<=8){
+  const o=shuf([n,...shuf(R(0,8).filter(x=>nm(x)!=nm(n))).slice(0,3)]);
+  return{text:`Na clave de ${cl}, onde fica a nota ${nm(n)}?`,opts:o.map(pos),ans:o.indexOf(n),tag:'Onde fica · '+cl+' · '+nm(n)};}
+ return{svg:staff(sol?'sol':'fa',n),text:'Qual é o nome desta nota?',opts:N,ans:md(n+(sol?2:4),7),tag:cl+' · '+nm(n)};
 }
 
-function genC(){
- const r=Math.random(),n4=['2','3','4','6'];
- if(r<.3){const c=rnd([[6,8,2],[9,8,3],[12,8,4],[6,4,2]]);return{text:`No compasso ${c[0]}/${c[1]}, quantos tempos há em cada compasso?`,opts:n4,ans:n4.indexOf(String(c[2]))};}
- if(r<.55){const c=rnd([[6,8],[9,8],[12,8],[6,4]]);const o=['Semínima','Semínima pontuada','Mínima','Mínima pontuada'];
-  return{text:`No compasso ${c[0]}/${c[1]}, qual figura é a unidade de tempo (vale 1 tempo)?`,opts:o,ans:o.indexOf(c[1]==8?'Semínima pontuada':'Mínima pontuada')};}
- if(r<.7){const c=rnd([[6,8],[6,4]]);const o=['Mínima','Mínima pontuada','Semibreve','Semibreve pontuada'];
-  return{text:`No compasso ${c[0]}/${c[1]}, qual figura é a unidade de compasso (preenche o compasso inteiro)?`,opts:o,ans:o.indexOf(c[1]==8?'Mínima pontuada':'Semibreve pontuada')};}
- if(r<.85){const c=rnd(['6/8','9/8','12/8']);return{text:`Quantas colcheias cabem em um tempo do compasso ${c}?`,opts:n4,ans:1};}
- return{text:'Nos compassos compostos, cada tempo se divide em quantas partes iguais?',opts:n4,ans:1};
-}
+/* ---------- figuras ---------- */
+const FG=[['w','Semibreve',4],['h','Mínima',2],['q','Semínima',1],['e','Colcheia',.5],['s','Semicolcheia',.25]];
+const TP={6:'6 tempos',4:'4 tempos',3:'3 tempos',2:'2 tempos',1.5:'1 tempo e meio',1:'1 tempo',.75:'3/4 de tempo',.5:'1/2 tempo',.25:'1/4 de tempo'};
+const UT='Tendo a semínima como unidade de tempo';
+const figSvg=(t,dot)=>{const s=staff(null,1,t);return dot?s.replace('</svg>','<circle cx="125" cy="75" r="2.8" fill="currentColor"/></svg>'):s;};
+const fgNome=k=>{const L=FG.slice(0,k),f=rnd(L);return{svg:figSvg(f[0]),text:'Qual é o nome desta figura?',opts:L.map(x=>x[1]),ans:L.indexOf(f),tag:'Nome · '+f[1]};};
+function fgValor(){const f=rnd(FG);
+ if(Math.random()<.5)return{svg:figSvg(f[0]),text:UT+', quantos tempos vale esta figura?',opts:FG.map(x=>TP[x[2]]),ans:FG.indexOf(f),tag:'Valor · '+f[1]};
+ return{text:UT+', qual figura vale '+TP[f[2]]+'?',opts:FG.map(x=>x[1]),ans:FG.indexOf(f),tag:'Valor · '+f[1]};}
+function fgCompara(){const[a,b]=shuf(FG).slice(0,2),mais=Math.random()<.5,c=(a[2]>b[2])==mais?a:b,o=shuf([a[1],b[1]]);
+ return{text:`Qual dura ${mais?'mais':'menos'}: ${a[1].toLowerCase()} ou ${b[1].toLowerCase()}?`,opts:o,ans:o.indexOf(c[1]),tag:'Comparar · '+a[1]+' × '+b[1]};}
+function fgCabem(){let a,b;do{[a,b]=shuf(FG).slice(0,2)}while(a[2]<=b[2]);const o=['2','4','8','16'];
+ return{text:`Quantas ${b[1].toLowerCase()}s cabem em uma ${a[1].toLowerCase()}?`,opts:o,ans:o.indexOf(String(a[2]/b[2])),tag:'Cabem · '+b[1]+' em '+a[1]};}
+function fgPonto(){
+ if(Math.random()<.2){const o=['Metade do seu valor','O dobro do seu valor','Um tempo a mais','Nada, só enfeita'];return{text:'O ponto de aumento acrescenta à figura:',opts:o,ans:0,tag:'Ponto de aumento'};}
+ const L=FG.slice(0,4),f=rnd(L);
+ return{svg:figSvg(f[0],1),text:`${UT}, quantos tempos vale a ${f[1].toLowerCase()} pontuada?`,opts:L.map(x=>TP[x[2]*1.5]),ans:L.indexOf(f),tag:'Pontuada · '+f[1]};}
 
-const mk=a=>a.map(([text,opts,ans,tag])=>({text,opts,ans,tag}));
-const PRONTAS=[{t:'Prova MSA – 20 questões',d:'Teoria básica do MSA, com perguntas fixas.',qs:mk([["Quantas linhas e quantos espaços tem a pauta?", ["4 linhas e 5 espaços", "5 linhas e 4 espaços", "5 linhas e 5 espaços", "4 linhas e 4 espaços"], 1, "Pauta"], ["Qual clave indica que a 2ª linha da pauta é a nota Sol?", ["Clave de Fá", "Clave de Dó", "Clave de Sol", "Nenhuma das anteriores"], 2, "Claves"], ["Em qual linha a clave de Fá indica a nota Fá?", ["4ª linha", "2ª linha", "1ª linha", "3ª linha"], 0, "Claves"], ["Quantos tempos há em cada compasso 4/4?", ["2", "3", "4", "6"], 2, "Compasso simples"], ["Qual destas figuras tem a maior duração?", ["Semibreve", "Mínima", "Semínima", "Colcheia"], 0, "Figuras"], ["Tendo a semínima como unidade de tempo, quantos tempos vale a mínima?", ["1 tempo", "4 tempos", "2 tempos", "Meio tempo"], 2, "Valor das figuras"], ["Quantas colcheias equivalem a uma semínima?", ["4", "2", "3", "8"], 1, "Valor das figuras"], ["Tendo a semínima como unidade de tempo, quantos tempos vale a semínima?", ["Meio tempo", "2 tempos", "4 tempos", "1 tempo"], 3, "Valor das figuras"], ["O ponto de aumento, colocado depois de uma figura:", ["Dobra o valor da figura", "Aumenta a metade do valor da figura", "Diminui a metade do valor da figura", "Não altera o valor da figura"], 1, "Ponto de aumento"], ["Tendo a semínima como unidade de tempo, quantos tempos vale a mínima pontuada?", ["2 tempos", "4 tempos", "3 tempos", "1 tempo e meio"], 2, "Ponto de aumento"], ["A ligadura de prolongamento serve para:", ["Somar os valores de notas iguais ligadas", "Separar um compasso do outro", "Indicar um silêncio", "Subir a nota meio tom"], 0, "Ligadura"], ["A fermata, colocada sobre uma nota ou pausa:", ["Encerra a música", "Repete o trecho anterior", "Acelera o andamento", "Prolonga a duração da nota ou da pausa"], 3, "Fermata"], ["Quantos tempos há em cada compasso 2/4?", ["4 tempos", "2 tempos", "3 tempos", "1 tempo"], 1, "Compasso simples"], ["No compasso 3/4, a figura que vale um tempo (unidade de tempo) é:", ["Mínima", "Colcheia", "Semínima", "Semibreve"], 2, "Compasso simples"], ["No compasso 4/4, a figura que preenche o compasso inteiro (unidade de compasso) é:", ["Semibreve", "Mínima", "Semínima", "Mínima pontuada"], 0, "Compasso simples"], ["Quantas semínimas cabem em um compasso 3/4?", ["4", "2", "6", "3"], 3, "Compasso simples"], ["A barra de compasso tem a função de:", ["Subir a nota meio tom", "Separar os compassos", "Prolongar a nota", "Cancelar um acidente"], 1, "Barra de compasso"], ["O sustenido:", ["Desce a nota meio tom", "Cancela um acidente anterior", "Sobe a nota meio tom", "Prolonga a nota"], 2, "Acidentes"], ["O bemol:", ["Desce a nota meio tom", "Sobe a nota meio tom", "Cancela um acidente anterior", "Dobra o valor da nota"], 0, "Acidentes"], ["O metrônomo é usado para:", ["Afinar o instrumento", "Indicar a altura das notas", "Escrever as notas na pauta", "Marcar a pulsação regular e o andamento"], 3, "Metrônomo"]])},
-{t:'Prova – Unidade de tempo simples e composta',d:'15 questões sobre unidade de tempo nos compassos simples e compostos.',qs:mk([["Nos compassos simples, cada tempo se divide em:", ["2 partes iguais", "3 partes iguais", "4 partes iguais", "6 partes iguais"], 0, "Unidade de tempo simples"], ["Nos compassos compostos, cada tempo se divide em:", ["2 partes iguais", "3 partes iguais", "4 partes iguais", "6 partes iguais"], 1, "Unidade de tempo composta"], ["No compasso 2/4, a unidade de tempo é:", ["Mínima", "Semínima", "Colcheia", "Semínima pontuada"], 1, "Unidade de tempo simples"], ["No compasso 2/2, a unidade de tempo é:", ["Semínima", "Semibreve", "Mínima", "Colcheia"], 2, "Unidade de tempo simples"], ["No compasso 3/8, a unidade de tempo é:", ["Semínima", "Colcheia", "Semicolcheia", "Mínima"], 1, "Unidade de tempo simples"], ["Qual destes compassos é composto?", ["2/4", "3/4", "6/8", "4/4"], 2, "Unidade de tempo composta"], ["No compasso 6/8, a unidade de tempo é:", ["Colcheia", "Semínima", "Semínima pontuada", "Mínima pontuada"], 2, "Unidade de tempo composta"], ["Quantos tempos há em cada compasso 6/8?", ["6", "3", "2", "4"], 2, "Unidade de tempo composta"], ["Quantos tempos há em cada compasso 9/8?", ["9", "3", "6", "4"], 1, "Unidade de tempo composta"], ["Quantos tempos há em cada compasso 12/8?", ["12", "6", "3", "4"], 3, "Unidade de tempo composta"], ["No compasso 6/4, a unidade de tempo é:", ["Mínima pontuada", "Semínima pontuada", "Semínima", "Mínima"], 0, "Unidade de tempo composta"], ["Quantas colcheias cabem em uma unidade de tempo do compasso 6/8?", ["2", "3", "4", "6"], 1, "Unidade de tempo composta"], ["No compasso 12/8, qual figura vale um tempo?", ["Semínima", "Mínima pontuada", "Semínima pontuada", "Semibreve"], 2, "Unidade de tempo composta"], ["No compasso 3/4, quantas semínimas cabem em um tempo?", ["1", "2", "3", "4"], 0, "Unidade de tempo simples"], ["No compasso 9/8, a unidade de tempo é:", ["Colcheia", "Semínima", "Mínima pontuada", "Semínima pontuada"], 3, "Unidade de tempo composta"]])},
-{t:'Prova – Propriedades do som e elementos da música',d:'15 questões: altura, duração, intensidade e timbre; melodia, harmonia e ritmo.',qs:mk([["Quais são as quatro propriedades do som?", ["Altura, duração, intensidade e timbre", "Melodia, harmonia, ritmo e timbre", "Altura, melodia, ritmo e compasso", "Duração, andamento, harmonia e intensidade"], 0, "Propriedades do som"], ["A altura do som indica se ele é:", ["Forte ou fraco", "Grave ou agudo", "Longo ou curto", "Produzido por qual instrumento"], 1, "Propriedades do som"], ["A duração do som indica se ele é:", ["Grave ou agudo", "Longo ou curto", "Forte ou fraco", "Produzido por qual instrumento"], 1, "Propriedades do som"], ["A intensidade do som indica se ele é:", ["Longo ou curto", "Forte ou fraco", "Grave ou agudo", "Produzido por qual instrumento"], 1, "Propriedades do som"], ["O timbre é a propriedade que:", ["Permite distinguir a fonte sonora, como um órgão de um violino", "Diz se o som é forte ou fraco", "Diz se o som é longo ou curto", "Diz se o som é grave ou agudo"], 0, "Propriedades do som"], ["Um som agudo é produzido por vibrações:", ["Mais lentas", "Mais rápidas", "Mais fortes", "Mais longas"], 1, "Propriedades do som"], ["Duas notas de mesma altura, tocadas por um órgão e por um violino, diferem em:", ["Altura", "Duração", "Timbre", "Intensidade"], 2, "Propriedades do som"], ["Na partitura, a duração dos sons é representada por:", ["Figuras musicais", "Claves", "Barras de compasso", "Sustenidos"], 0, "Propriedades do som"], ["Quais são os três elementos básicos da música?", ["Melodia, harmonia e ritmo", "Altura, duração e timbre", "Pauta, clave e compasso", "Solfejo, teoria e prática"], 0, "Elementos da música"], ["A melodia é:", ["A combinação de sons tocados ao mesmo tempo", "A sucessão de sons de alturas diferentes, organizada no tempo", "A divisão do tempo em pulsos", "O sinal de silêncio"], 1, "Elementos da música"], ["A harmonia é:", ["A sucessão de sons de alturas diferentes", "A combinação de sons tocados ao mesmo tempo, como os acordes", "A organização da duração dos sons", "A velocidade da música"], 1, "Elementos da música"], ["O ritmo é:", ["A combinação de sons simultâneos", "A altura dos sons", "A organização dos sons e silêncios no tempo", "A qualidade do som"], 2, "Elementos da música"], ["Qual elemento é a linha principal que podemos cantar ou assobiar?", ["Harmonia", "Ritmo", "Melodia", "Intensidade"], 2, "Elementos da música"], ["Um acorde, com três ou mais sons ao mesmo tempo, pertence à:", ["Harmonia", "Melodia", "Ritmo", "Altura"], 0, "Elementos da música"], ["A pulsação regular e a divisão em compassos pertencem ao:", ["Timbre", "Ritmo", "Melodia", "Harmonia"], 1, "Elementos da música"]])}];
+/* ---------- compasso ---------- */
+const fmSvg=(a,b)=>V(['47','92'].map((y,i)=>`<text x="80" y="${y}" font-size="44" font-weight="700" text-anchor="middle" fill="currentColor" font-family="Georgia,serif">${i?b:a}</text>`).join(''));
+const SIMP=[[2,4],[3,4],[4,4],[2,2],[3,8]],COMP=[[6,8],[9,8],[12,8],[6,4],[12,16]];
+const F4=['Semibreve','Mínima','Semínima','Colcheia'],N4=['2','3','4','6'];
+const fmt=c=>c[0]+'/'+c[1];
+function cpFormula(){const r=Math.random(),c=rnd(SIMP);
+ if(r<.6)return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, quantos tempos há em cada compasso?`,opts:N4,ans:N4.indexOf(String(c[0])),tag:'Tempos · '+fmt(c)};
+ const o=['Quantos tempos tem o compasso','Qual figura vale um tempo','O andamento da música','A altura das notas'],cima=r<.8;
+ return{text:`Na fórmula do compasso simples, o número de ${cima?'cima':'baixo'} indica:`,opts:o,ans:cima?0:1,tag:'Número de '+(cima?'cima':'baixo')};}
+function cpUT(){const c=rnd(SIMP);return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, qual figura é a unidade de tempo (vale 1 tempo)?`,opts:F4,ans:F4.indexOf({2:'Mínima',4:'Semínima',8:'Colcheia'}[c[1]]),tag:'Unidade de tempo · '+fmt(c)};}
+function cpUC(){const c=rnd(SIMP),o=['Mínima','Mínima pontuada','Semibreve','Semínima pontuada'],a={'2/4':'Mínima','3/4':'Mínima pontuada','4/4':'Semibreve','2/2':'Semibreve','3/8':'Semínima pontuada'}[fmt(c)];
+ return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, qual figura preenche o compasso inteiro (unidade de compasso)?`,opts:o,ans:o.indexOf(a),tag:'Unidade de compasso · '+fmt(c)};}
+function cpCabem(){const VL={Semibreve:1,Mínima:.5,Semínima:.25,Colcheia:.125,Semicolcheia:.0625};let c,f,n;
+ do{c=rnd(SIMP);f=rnd(Object.keys(VL));n=(c[0]/c[1])/VL[f]}while(!Number.isInteger(n)||n<2||n>16);
+ const o=shuf([n,...shuf([...new Set([n*2,n+1,n-1,Math.round(n/2),n+2])].filter(x=>x>0&&x!=n)).slice(0,3)]);
+ return{svg:fmSvg(...c),text:`Quantas ${f.toLowerCase()}s cabem em um compasso ${fmt(c)}?`,opts:o.map(String),ans:o.indexOf(n),tag:'Cabem · '+f+' em '+fmt(c)};}
+function cpClasse(){const c=rnd(SIMP),o=['Binário','Ternário','Quaternário'];return{svg:fmSvg(...c),text:`O compasso ${fmt(c)} é:`,opts:o,ans:c[0]-2,tag:'Classificação · '+fmt(c)};}
+function cpSimpComp(){const comp=Math.random()<.5,c=rnd(comp?COMP:SIMP),o=['Simples','Composto'];return{svg:fmSvg(...c),text:`O compasso ${fmt(c)} é simples ou composto?`,opts:o,ans:comp?1:0,tag:'Simples ou composto · '+fmt(c)};}
+function cpTemposC(){const c=rnd(COMP);return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, quantos tempos há em cada compasso?`,opts:N4,ans:N4.indexOf(String(c[0]/3)),tag:'Tempos · '+fmt(c)};}
+function cpUTC(){const c=rnd(COMP),o=['Colcheia pontuada','Semínima pontuada','Mínima pontuada','Semínima'];
+ return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, qual figura é a unidade de tempo?`,opts:o,ans:o.indexOf({16:'Colcheia pontuada',8:'Semínima pontuada',4:'Mínima pontuada'}[c[1]]),tag:'Unidade de tempo · '+fmt(c)};}
+function cpDivisao(){const r=Math.random();
+ if(r<.4){const c=rnd([[6,8],[9,8],[12,8]]);return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, quantas colcheias formam um tempo?`,opts:N4,ans:1,tag:'Divisão · '+fmt(c)};}
+ if(r<.55)return{svg:fmSvg(6,4),text:'No compasso 6/4, quantas semínimas formam um tempo?',opts:N4,ans:1,tag:'Divisão · 6/4'};
+ if(r<.7)return{text:'No compasso composto, cada tempo se divide em quantas partes iguais?',opts:N4,ans:1,tag:'Divisão do tempo composto'};
+ if(r<.8)return{text:'No compasso simples, cada tempo se divide em quantas partes iguais?',opts:N4,ans:0,tag:'Divisão do tempo simples'};
+ const c=rnd([[6,8],[12,8],[6,4]]),o=['Mínima pontuada','Semibreve pontuada','Semibreve','Mínima'];
+ return{svg:fmSvg(...c),text:`No compasso ${fmt(c)}, qual figura preenche o compasso inteiro (unidade de compasso)?`,opts:o,ans:o.indexOf({'6/8':'Mínima pontuada','12/8':'Semibreve pontuada','6/4':'Semibreve pontuada'}[fmt(c)]),tag:'Unidade de compasso · '+fmt(c)};}
+function cpClasseC(){const c=rnd(COMP),o=['Binário composto','Ternário composto','Quaternário composto','Binário simples'];return{svg:fmSvg(...c),text:`O compasso ${fmt(c)} é:`,opts:o,ans:c[0]/3-2,tag:'Classificação · '+fmt(c)};}
+
+/* ---------- trilhas (níveis estilo Duolingo) ---------- */
+const META=90; // % mínimo de acertos para abrir o próximo nível
+// Cada nível: id (único entre todas as trilhas), u = unidade, t/d = título e descrição,
+// g = gerador de questão; n = nº de questões (padrão 10); mix = sorteia entre os outros níveis da trilha.
+const TR={
+ notas:{units:[['Clave de Sol','Os primeiros passos na leitura'],['Clave de Fá','Agora a pauta dos graves'],['Desafios','As duas claves juntas']],lv:[
+  {id:'s1',u:0,t:'Primeiras notas',d:'Dó, Ré, Mi, Fá e Sol',c:'sol',ns:R(-2,2)},
+  {id:'s2',u:0,t:'Lá, Si e Dó',d:'Subindo a pauta',c:'sol',ns:R(0,5)},
+  {id:'s3',u:0,t:'Notas nas linhas',d:'Mi, Sol, Si, Ré e Fá',c:'sol',ns:[0,2,4,6,8]},
+  {id:'s4',u:0,t:'Notas nos espaços',d:'Fá, Lá, Dó e Mi',c:'sol',ns:[1,3,5,7]},
+  {id:'s5',u:0,t:'Onde fica a nota?',d:'Linha ou espaço',c:'sol',ns:R(0,8),k:'onde'},
+  {id:'s6',u:0,t:'Pauta inteira',d:'Todas as notas da pauta',c:'sol',ns:R(-2,9)},
+  {id:'s7',u:0,t:'Linhas suplementares',d:'Notas acima e abaixo da pauta',c:'sol',ns:[-4,-3,-2,-1,9,10,11,12]},
+  {id:'f1',u:1,t:'Primeiras notas',d:'Sol, Lá, Si, Dó e Ré',c:'fa',ns:R(0,4)},
+  {id:'f2',u:1,t:'Notas nas linhas',d:'Sol, Si, Ré, Fá e Lá',c:'fa',ns:[0,2,4,6,8]},
+  {id:'f3',u:1,t:'Notas nos espaços',d:'Lá, Dó, Mi e Sol',c:'fa',ns:[1,3,5,7]},
+  {id:'f4',u:1,t:'Onde fica a nota?',d:'Linha ou espaço na clave de Fá',c:'fa',ns:R(0,8),k:'onde'},
+  {id:'f5',u:1,t:'Pauta inteira',d:'Todas as notas, com o Dó central',c:'fa',ns:R(-2,10)},
+  {id:'d1',u:2,t:'Sol ou Fá?',d:'As duas claves misturadas',c:'mix',ns:R(-2,9)},
+  {id:'d2',u:2,t:'Desafio final',d:'Tudo junto, 15 questões',c:'mix',ns:R(-4,12),k:'mix',n:15}]},
+ figuras:{units:[['Conhecendo as figuras','Nome e valor de cada uma'],['Comparando figuras','Quem dura mais e quantas cabem'],['Desafio','Tudo junto']],lv:[
+  {id:'fg1',u:0,t:'As três primeiras',d:'Semibreve, mínima e semínima',g:()=>fgNome(3)},
+  {id:'fg2',u:0,t:'Colcheia e semicolcheia',d:'Agora as cinco figuras',g:()=>fgNome(5)},
+  {id:'fg3',u:0,t:'Quanto vale?',d:'O valor de cada figura em tempos',g:fgValor},
+  {id:'fg4',u:1,t:'Qual dura mais?',d:'Comparando duas figuras',g:fgCompara},
+  {id:'fg5',u:1,t:'Quantas cabem?',d:'Uma figura dentro da outra',g:fgCabem},
+  {id:'fg6',u:1,t:'Ponto de aumento',d:'Figuras pontuadas',g:fgPonto},
+  {id:'fg7',u:2,t:'Desafio das figuras',d:'Tudo junto, 15 questões',n:15,mix:1}]},
+ compasso:{units:[['Compasso simples','Tempos, unidade de tempo e de compasso'],['Compasso composto','Tempos que se dividem em três'],['Desafio','Simples e composto juntos']],lv:[
+  {id:'cp1',u:0,t:'Fórmula de compasso',d:'O que dizem os dois números',g:cpFormula},
+  {id:'cp2',u:0,t:'Unidade de tempo',d:'A figura que vale um tempo',g:cpUT},
+  {id:'cp3',u:0,t:'Unidade de compasso',d:'A figura que enche o compasso',g:cpUC},
+  {id:'cp4',u:0,t:'Quantas cabem?',d:'Figuras dentro do compasso',g:cpCabem},
+  {id:'cp5',u:0,t:'Binário, ternário ou quaternário?',d:'Classificando o compasso',g:cpClasse},
+  {id:'cp6',u:1,t:'Simples ou composto?',d:'Reconhecendo pela fórmula',g:cpSimpComp},
+  {id:'cp7',u:1,t:'Tempos no composto',d:'6/8, 9/8, 12/8, 6/4 e 12/16',g:cpTemposC},
+  {id:'cp8',u:1,t:'Unidade de tempo no composto',d:'Sempre uma figura pontuada',g:cpUTC},
+  {id:'cp9',u:1,t:'Divisão do tempo',d:'Em duas ou em três partes',g:cpDivisao},
+  {id:'cp10',u:1,t:'Classificação do composto',d:'Binário, ternário e quaternário composto',g:cpClasseC},
+  {id:'cp11',u:2,t:'Desafio do compasso',d:'Tudo junto, 15 questões',n:15,mix:1}]},
+ simbolos:{lesson:1,units:[['Conhecendo os símbolos','Claves, acidentes e sinais de duração'],['Desafio','Todos os símbolos']],lv:[
+  {id:'sb1',u:0,t:'Claves',d:'Sol, Fá e Dó',g:()=>genS(symL('Clave de Sol','Clave de Fá','Clave de Dó'))},
+  {id:'sb2',u:0,t:'Acidentes',d:'Sustenido, bemol e bequadro',g:()=>genS(symL('Sustenido','Bemol','Bequadro'))},
+  {id:'sb3',u:0,t:'Sinais de duração',d:'Fermata, ligadura e ponto de aumento',g:()=>genS(symL('Fermata','Ligadura','Ponto de aumento'))},
+  {id:'sb4',u:1,t:'Todos os símbolos',d:'Tudo junto, 15 questões',n:15,mix:1}]}};
+const ALL={};for(const k in TR)TR[k].lv.forEach((L,i)=>{L.tr=k;L.i=i;ALL[L.id]=L;});
+const genQ=L=>L.mix?genQ(rnd(TR[L.tr].lv.filter(x=>!x.mix))):L.g?L.g():genLvl(L);
+// provas sorteadas: sorteia um nível qualquer do módulo (aceita também os nomes antigos de módulo)
+const gen=m=>{m=ALIAS[m]||m;return TR[m]?genQ(rnd(TR[m].lv)):genS();};
+
+const lvlBest=(k,i)=>P.stats['t:'+TR[k].lv[i].id]?.best;
+const lvlOpen=(k,i)=>owner||i==0||lvlBest(k,i-1)>=META;
+const lvlDone=k=>TR[k].lv.filter((_,i)=>lvlBest(k,i)>=META).length;
+function trilhaScr(k){
+ const T=TR[k],M=MODS[k];
+ let h=`<button data-home>← Voltar</button><h2>${M.i} ${M.t}</h2><div class="mut">Acerte pelo menos ${META}% em um nível para abrir o próximo.</div>${T.lesson?'<button data-lesson style="margin-top:10px">📖 Ver a lição dos símbolos</button>':''}`;
+ T.lv.forEach((L,i)=>{
+  if(i==0||T.lv[i-1].u!=L.u)h+=`<div class="unit">Unidade ${L.u+1} · ${T.units[L.u][0]}<div class="mut">${T.units[L.u][1]}</div></div>`;
+  const b=lvlBest(k,i),ok=b>=META,op=lvlOpen(k,i),x=[0,.65,1,.65,0,-.65,-1,-.65][i%8];
+  h+=`<div class="node-row" style="transform:translateX(calc(${x} * min(85px, 10vw)))"><button class="node ${ok?'done':op?'cur':'lock'}" ${op?`data-lvl="${k}|${i}"`:'disabled'} aria-label="${esc(L.t)}">${ok?'✓':op?i+1:'🔒'}</button><div class="node-lbl"><b>${esc(L.t)}</b><div class="mut">${esc(L.d)}${b!=null?' · melhor: '+b+'%':''}</div></div></div>`;
+ });
+ return h;
+}
+function startLvl(k,i){
+ const L=TR[k].lv[i];curTr=k;curLvl=i;curMod='t:'+L.id;exm=null;
+ {const o=P.stats[curMod]||{ok:0,tot:0,hist:[],r:0};o.s=(o.s||0)+1;P.stats[curMod]=o;}
+ Q=Array.from({length:L.n||10},()=>({...genQ(L),m:curMod}));qi=0;okc=0;view='quiz';showQ();
+}
+const modT=m=>{if(m.startsWith('t:')){const L=ALL[m.slice(2)];return MODS[L.tr].t+' · '+L.t;}return MODS[m]?.t||m;};
+
 /* ---------- estado e dados ---------- */
-let TOKEN=null,owner=false,NAME='',unl=['notas_sol'],tab='praticar',view='home',prev=false;
-let P={stats:{},err:{},exams:{}},allProg=[],allUnl={},roster=[],exams=[],editId=null,rmId=null,edelId=null,Q=[],ANS=[],qi=0,okc=0,curMod='',done=false,exm=null;
+let curLvl=0,curTr='notas',TOKEN=null,owner=false,NAME='',unl=['notas'],tab='praticar',view='home',prev=false;
+let P={stats:{},err:{},exams:{}},allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
 const pct=s=>s&&s.tot?Math.round(100*s.ok/s.tot):null;
 try{TOKEN=sessionStorage.getItem('tk')}catch(e){}
 async function api(action,body){
@@ -141,20 +248,20 @@ async function api(action,body){
   return j;
  }catch(e){return{error:'Sem conexão com o servidor.'}}
 }
-function logout(){TOKEN=null;owner=false;try{sessionStorage.removeItem('tk')}catch(e){}P={stats:{},err:{},exams:{}};unl=['notas_sol'];view='home';exm=null;draw();}
+function logout(){TOKEN=null;owner=false;try{sessionStorage.removeItem('tk')}catch(e){}P={stats:{},err:{},exams:{}};unl=['notas'];view='home';exm=null;draw();}
 async function refresh(){
  if(!TOKEN){draw();return;}
  const r=await api('me');if(r.error||!TOKEN)return;
  owner=r.role=='prof';NAME=r.name;
- if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;allUnl=r.allUnl;}
- else{unl=r.unl;exams=r.exams;P={stats:r.prog.stats||{},err:r.prog.err||{},exams:r.prog.exams||{},cur:r.prog.cur};}
+ if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
+ else{unl=normU(r.unl);exams=r.exams;P={stats:r.prog.stats||{},err:r.prog.err||{},exams:r.prog.exams||{},cur:r.prog.cur};}
  draw();
 }
 async function saveP(){if(TOKEN&&!owner)await api('save',{stats:P.stats,err:P.err,cur:P.cur||null});}
 function addErr(m,tag){(P.err[m]=P.err[m]||{})[tag]=(P.err[m][tag]||0)+1;}
 async function saveRound(m,ok,tot){
  const o=P.stats[m]||{ok:0,tot:0,hist:[],r:0};
- P.stats[m]={ok:o.ok+ok,tot:o.tot+tot,s:o.s||0,r:(o.r||0)+1,hist:[...(o.hist||[]),Math.round(100*ok/tot)].slice(-8)};
+ P.stats[m]={ok:o.ok+ok,tot:o.tot+tot,s:o.s||0,r:(o.r||0)+1,hist:[...(o.hist||[]),Math.round(100*ok/tot)].slice(-8),best:Math.max(o.best||0,Math.round(100*ok/tot))};
  await saveP();
 }
 async function init(){await refresh();draw();}
@@ -164,22 +271,24 @@ const open=m=>owner||unl.includes(m);
 const $=document.getElementById('app');
 function draw(){
  if(view=='quiz'||view=='lesson')return;
+ if(view=='trilha'&&TOKEN){$.innerHTML=trilhaScr(curTr);return;}
  let h=`<h1>🎼 Teoria Musical</h1>`;
  if(!TOKEN){$.innerHTML=h+loginScr();return;}
  h+=`<div class="mut">Olá, ${esc(NAME)}! <button data-logout style="padding:2px 8px;font-size:12px">sair</button> ${owner?'':'Exercícios liberados pela professora conforme a aula.'}</div>`;
- if(owner)h+=`<div class="tabs">${[['praticar','Praticar'],['alunas','Alunas'],['provas','Provas']].map(t=>`<button class="${tab==t[0]?'on':''}" data-tab="${t[0]}">${t[1]}</button>`).join('')}<button data-refresh>↻ Atualizar</button></div>`;
+ h+=installCard();
+ if(owner)h+=`<div class="tabs">${[['praticar','Praticar'],['alunas','Alunos'],['provas','Provas']].map(t=>`<button class="${tab==t[0]?'on':''}" data-tab="${t[0]}">${t[1]}</button>`).join('')}<button data-refresh>↻ Atualizar</button></div>`;
  h+=owner&&tab=='alunas'?alunas():owner&&tab=='provas'?provas():home();
  $.innerHTML=h;
 }
 function loginScr(){
- return `<h2>Entrar</h2><div class="card"><input type="text" id="lg" placeholder="Login" autocapitalize="none"><br><br><input type="password" id="pw" placeholder="Senha" style="font:inherit;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:inherit"><br><br><button class="pri" data-login>Entrar</button><div class="fb" id="lerr" style="color:var(--bad)"></div><div class="mut">Alunas: login e senha criados pela professora.</div></div>`;
+ return `<h2>Entrar</h2><div class="card"><input type="text" id="lg" placeholder="Login" autocapitalize="none"><br><br><input type="password" id="pw" placeholder="Senha" style="font:inherit;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:inherit"><br><br><button class="pri" data-login>Entrar</button><div class="fb" id="lerr" style="color:var(--bad)"></div><div class="mut">Alunos: login e senha criados pela professora.</div></div>`;
 }
 function home(){
  let h='<h2>Exercícios</h2>';
- let c=0;for(const m of KEYS){const s=P.stats[m],p=pct(s),o=open(m);if(!o)continue;c++;
-  h+=`<div class="card mod ${o?'':'lock'}" ${o?`data-start="${m}"`:''}><div><b>${MODS[m].t}</b><div class="mut">${MODS[m].d}</div><div class="bar" style="margin-top:6px;width:160px"><i style="width:${p||0}%"></i></div><div class="mut">${p!=null?p+'% de acertos · '+s.tot+' questões · '+(s.r||1)+' tentativa(s)':'Ainda sem exercícios feitos'}</div></div><span class="pill">${o?(m=='simbolos'?'Lição':'Começar'):'🔒 bloqueado'}</span></div>`;}
+ let c=0;for(const m of KEYS){if(!open(m))continue;c++;const d=lvlDone(m),n=TR[m].lv.length;
+  h+=`<div class="card mod" data-start="${m}"><div><b>${MODS[m].i} ${MODS[m].t}</b><div class="mut">${MODS[m].d}</div><div class="bar" style="margin-top:6px;width:160px"><i style="width:${Math.round(100*d/n)}%"></i></div><div class="mut">${d==n?'Trilha completa! 🏆':d+' de '+n+' níveis concluídos'}</div></div><span class="pill">${d?'Continuar':'Começar'}</span></div>`;}
  if(!c)h+='<div class="card mut">Nenhum exercício liberado ainda. Aguarde a professora liberar.</div>';
- const ex=exams.filter(e=>e.open||owner);
+ const ex=owner?[]:exams; // o aluno só recebe do servidor as provas liberadas para ela
  if(ex.length){h+='<h2>Provas</h2>';for(const e of ex){const r=P.exams[e.id];
   h+=`<div class="card mod ${r?'lock':''}" ${r?'':`data-exam="${e.id}"`}><div><b>${esc(e.title)}</b><div class="mut">${e.n} questões · uma única tentativa</div></div><span class="pill">${r?(r.ok!=null?r.ok+'/'+r.tot:'iniciada'):'Fazer prova'}</span></div>`;}}
  return h;
@@ -187,62 +296,90 @@ function home(){
 const fmtDT=t=>t?new Date(t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
 const nr=s=>s?(s.r||Math.round((s.tot||0)/10)):0;
 const fmtD=d=>d?d.split('-').reverse().join('/'):'';
-function stuHead(r){
- if(editId==r.id)return `<div class="card"><b>Editar aluna</b><div style="display:grid;gap:8px;margin:8px 0"><input type="text" id="ef-n" value="${esc(r.name)}" placeholder="Nome"><input type="text" id="ef-l" value="${esc(r.login||'')}" placeholder="Login" autocapitalize="none"><input type="text" id="ef-p" placeholder="Nova senha (vazio mantém a atual)"><label>Início: <input type="date" id="ef-d" value="${esc(r.start||'')}"></label></div><button class="pri" data-save="${r.id}">Salvar</button> <button data-cancel>Cancelar</button>`;
- return `<div class="card"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div><b>${esc(r.name)}</b> <span class="mut">login: ${esc(r.login||'— sem acesso')}${r.start?' · início: '+fmtD(r.start):''}</span></div><div><button data-edit="${r.id}">editar</button> ${rmId==r.id?`<span class="mut">Remover?</span> <button data-rmyes="${r.id}">Sim</button> <button data-rmno>Não</button>`:`<button data-rm="${r.id}">remover</button>`}</div></div>`;
+const ABCD='ABCD';
+function editForm(r){
+ return `<div class="card"><b>Editar aluno</b><div style="display:grid;gap:8px;margin:8px 0"><input type="text" id="ef-n" value="${esc(r.name)}" placeholder="Nome"><input type="text" id="ef-l" value="${esc(r.login||'')}" placeholder="Login" autocapitalize="none"><input type="text" id="ef-p" placeholder="Nova senha (vazio mantém a atual)"><label>Início: <input type="date" id="ef-d" value="${esc(r.start||'')}"></label></div><button class="pri" data-save="${r.id}">Salvar</button> <button data-cancel>Cancelar</button></div>`;
+}
+// Respostas de uma prova de questões fixas: ✓/✗ por questão; nas erradas, o que ela marcou e a certa.
+function respostas(e,r){
+ return `<ol class="gab">${e.qs.map((q,i)=>{const m=r.ans[i],ok=m===q.a;
+  return `<li><span style="color:var(--${ok?'ok':'bad'});font-weight:700">${ok?'✓':'✗'}</span> ${esc(q.t)}${ok?'':`<br><span class="mut">Marcou: ${m>=0?'('+ABCD[m]+') '+esc(q.o[m]):'em branco'} · Certa: <b style="color:var(--ok)">(${ABCD[q.a]}) ${esc(q.o[q.a])}</b></span>`}</li>`}).join('')}</ol>`;
+}
+function stuBody(r,a,un){
+ const u=r.id,st=a?.stats||{};
+ let h=`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px"><span class="mut">login: ${esc(r.login||'— sem acesso')}${r.start?' · início: '+fmtD(r.start):''}${a?.accN?' · '+a.accN+' acesso(s)':''}</span><span><button data-edit="${u}">editar</button> ${rmId==u?`<span class="mut">Remover?</span> <button data-rmyes="${u}">Sim</button> <button data-rmno>Não</button>`:`<button data-rm="${u}">remover</button>`}</span></div>`;
+ if(a?.cur)h+=`<div class="mut" style="margin-top:6px">⚠ Sessão não concluída: "${esc(a.cur.t)}", questão ${a.cur.q} de ${a.cur.n} (${fmtDT(a.cur.ts)})</div>`;
+ // exercícios: um resumo por trilha (soma dos níveis) e, abaixo, a nota de cada nível
+ h+='<h3>Exercícios</h3><table><tr><th>Trilha</th><th>Níveis</th><th>Acertos</th><th>Rodadas</th><th>Paradas</th><th>Liberado</th></tr>';
+ for(const m of KEYS){const ss=TR[m].lv.map(L=>st['t:'+L.id]).filter(Boolean),sm=(f)=>ss.reduce((t,s)=>t+(s[f]||0),0);
+  const done=TR[m].lv.filter(L=>st['t:'+L.id]?.best>=META).length,rod=sm('r'),par=Math.max(0,sm('s')-rod);
+  h+=`<tr><td>${MODS[m].i} ${MODS[m].t}</td><td>${done}/${TR[m].lv.length}</td><td>${sm('tot')?Math.round(100*sm('ok')/sm('tot'))+'%':'–'}</td><td>${rod}</td><td>${par}</td><td><input type="checkbox" data-unl="${u}|${m}" ${un.includes(m)?'checked':''}></td></tr>`;}
+ h+='</table>';
+ for(const m of KEYS){const T=TR[m];if(!T.lv.some(L=>st['t:'+L.id]))continue;
+  h+=`<details><summary>${MODS[m].i} Níveis de ${MODS[m].t}</summary><ol class="gab">${T.lv.map(L=>{const s=st['t:'+L.id],b=s?.best;return `<li>${esc(T.units[L.u][0])} · ${esc(L.t)}: ${b!=null?`<b style="color:var(--${b>=META?'ok':'bad'})">${b}%</b> <span class="mut">(${nr(s)} rodada(s)${s.hist?.length?' · últimas: '+s.hist.slice(-4).join(' · '):''})</span>`:'<span class="mut">não fez</span>'}</li>`}).join('')}</ol></details>`;}
+ const er=[];for(const m in a?.err||{})for(const t in a.err[m])er.push([m,t,a.err[m][t]]);er.sort((x,y)=>y[2]-x[2]);
+ h+=`<div style="margin-top:8px"><b>Onde mais erra nos exercícios:</b> <span class="mut">${er.length?er.slice(0,5).map(x=>esc(x[1])+' ('+x[2]+'×)').join(' · '):'sem erros registrados'}</span></div>`;
+ h+='<h3>Provas</h3><div class="mut">Marque as provas que este aluno pode fazer.</div>';
+ for(const e of exams){const x=a?.exams?.[e.id];
+  h+=`<div style="border-top:1px solid var(--bd);padding:8px 0"><label style="font-size:15px"><input type="checkbox" data-unl="${u}|${e.id}" ${un.includes(e.id)?'checked':''}> <b>${esc(e.title)}</b></label> <span class="mut">${x?(x.ok!=null?`· ${x.ok}/${x.tot} (${Math.round(100*x.ok/x.tot)}%) em ${fmtDT(x.ts)}`:'· iniciada, não concluída'):un.includes(e.id)?'· liberada, ainda não fez':''}</span>`;
+  if(x)h+=` <button data-reset="${u}|${e.id}" style="padding:2px 8px;font-size:12px">liberar nova tentativa</button>`;
+  if(x&&x.ans&&e.qs)h+=`<details><summary>Ver o que errou e acertou</summary>${respostas(e,x)}</details>`;
+  h+='</div>';}
+ return h;
 }
 function alunas(){
- let h=`<h2>Cadastrar aluna</h2><div class="card"><input type="text" id="nn" placeholder="Nome da aluna"> <input type="text" id="nl" placeholder="Login (ex.: ana)" autocapitalize="none"> <input type="text" id="np" placeholder="Senha"> <label>Início: <input type="date" id="nd"></label> <button class="pri" data-add>Cadastrar</button><div class="mut" style="margin-top:6px">A aluna entra com esse login e senha. Anote a senha: depois dela salva você só pode redefinir.</div></div><h2>Alunas</h2>`;
- const list=roster.map(r=>({r,u:r.id}));
- if(!list.length)h+='<div class="card mut">Nenhuma aluna cadastrada.</div>';
- for(const{r,u}of list){
-  const a=allProg.find(x=>x.id==u),un=allUnl[u]||['notas_sol'],st=a?.stats||{};
-  h+=stuHead(r);
-  if(!a){h+='<div class="mut">Ainda não acessou.</div></div>';continue;}
-  h+=`<div class="mut" style="margin:6px 0">Último acesso: ${a.acc?fmtDT(a.acc):'—'}${a.accN?' · '+a.accN+' acesso(s)':''}${a.cur?`<br>⚠ Sessão não concluída: "${esc(a.cur.t)}", questão ${a.cur.q} de ${a.cur.n} (${fmtDT(a.cur.ts)})`:''}</div>`;
-  h+='<table><tr><th>Módulo</th><th>Acertos</th><th>Feitas</th><th>Paradas</th><th>Últimas</th><th>Liberado</th></tr>';
-  for(const m of KEYS){const s=st[m];h+=`<tr><td>${MODS[m].t}</td><td>${s&&pct(s)!=null?pct(s)+'%':'–'}</td><td>${nr(s)}${nr(s)>1?' (repetiu)':''}</td><td>${s&&(s.s||0)>nr(s)?(s.s-nr(s)):0}</td><td class="mut">${s?(s.hist||[]).slice(-4).join(' · '):''}</td><td><input type="checkbox" data-unl="${u}|${m}" ${un.includes(m)?'checked':''}></td></tr>`;}
-  h+='</table>';
-  const er=[];for(const m in a?.err||{})for(const t in a.err[m])er.push([m,t,a.err[m][t]]);er.sort((x,y)=>y[2]-x[2]);
-  h+=`<div style="margin-top:8px"><b>Onde mais erra:</b> <span class="mut">${er.length?er.slice(0,5).map(x=>esc(x[1])+' ('+x[2]+'×)').join(' · '):'sem erros registrados'}</span></div>`;
-  const pr=exams.filter(e=>a?.exams?.[e.id]);if(pr.length)h+='<div style="margin-top:6px"><b>Provas:</b> '+pr.map(e=>esc(e.title)+': '+(a.exams[e.id].ok!=null?a.exams[e.id].ok+'/'+a.exams[e.id].tot:'iniciada')+` <button data-reset="${u}|${e.id}">liberar nova tentativa</button>`).join(' · ')+'</div>';
+ let h=`<h2>Cadastrar aluno</h2><div class="card"><input type="text" id="nn" placeholder="Nome do aluno"> <input type="text" id="nl" placeholder="Login (ex.: ana)" autocapitalize="none"> <input type="text" id="np" placeholder="Senha"> <label>Início: <input type="date" id="nd"></label> <button class="pri" data-add>Cadastrar</button><div class="mut" style="margin-top:6px">O aluno entra com esse login e senha. Anote a senha: depois dela salva você só pode redefinir.</div></div><h2>Alunos</h2>`;
+ if(!roster.length)h+='<div class="card mut">Nenhum aluno cadastrado.</div>';
+ else h+='<div class="mut">Clique no aluno para ver exercícios, provas e respostas.</div>';
+ for(const r of roster){
+  const u=r.id,a=allProg.find(x=>x.id==u),un=allUnl[u]||['notas'],isOpen=openStu==u;
+  if(editId==u){h+=editForm(r);continue;}
+  const feitas=exams.filter(e=>a?.exams?.[e.id]?.ok!=null).length,lib=exams.filter(e=>un.includes(e.id)).length;
+  h+=`<div class="card"><div class="mod" data-open="${u}"><div><b>${esc(r.name)}</b><div class="mut">${a?.acc?'Último acesso: '+fmtDT(a.acc):'Ainda não acessou'} · provas: ${feitas} feita(s) de ${lib} liberada(s)</div></div><span class="pill">${isOpen?'▾ fechar':'▸ abrir'}</span></div>`;
+  if(isOpen)h+=stuBody(r,a,un);
   h+='</div>';}
  return h;
 }
 function provas(){
- let h=`<h2>Criar prova</h2><div class="card"><input type="text" id="et" placeholder="Título (ex.: Prova 1 – Notas)"><div style="margin:8px 0">${KEYS.map(m=>`<label><input type="checkbox" data-em="${m}"> ${MODS[m].t}</label>`).join('<br>')}</div>Questões: <input type="number" id="en" value="10" min="3" max="30" style="width:70px"> <button class="pri" data-mkexam>Criar prova</button></div><h2>Provas prontas</h2>${PRONTAS.map((p,i)=>`<div class="card"><b>${p.t}</b><div class="mut">${p.d}</div>${exams.some(e=>e.qs&&e.title==p.t)?'<span class="mut">Já adicionada abaixo.</span>':`<button class="pri" data-addp="${i}" style="margin-top:8px">Adicionar ao app</button>`}</div>`).join('')}<h2>Provas criadas</h2>`;
- if(!exams.length)h+='<div class="card mut">Nenhuma prova ainda.</div>';
- for(const e of exams){
-  h+=`<div class="card"><b>${esc(e.title)}</b> <span class="mut">· ${e.n} questões · ${e.qs?'perguntas fixas':(e.mods||[]).map(m=>MODS[m]?.t).join(', ')}</span><div style="margin:6px 0"><label><input type="checkbox" data-eopen="${e.id}" ${e.open?'checked':''}> Liberada para as alunas</label> ${edelId==e.id?`<span class="mut">Excluir?</span> <button data-edelyes="${e.id}">Sim</button> <button data-edelno>Não</button>`:`<button data-edel="${e.id}">excluir</button>`}</div>`;
-  const rs=allProg.filter(a=>a.exams?.[e.id]);
-  h+=rs.length?'<table>'+rs.map(a=>{const r=a.exams[e.id];return `<tr><td>${esc(roster.find(r=>r.id==a.id)?.name||a.name)}</td><td>${r.ok!=null?r.ok+'/'+r.tot+' ('+Math.round(100*r.ok/r.tot)+'%)':'iniciada, não concluída'}</td></tr>`}).join('')+'</table>':'<div class="mut">Ninguém fez ainda.</div>';
-  h+='</div>';}
+ const nome=id=>esc(roster.find(r=>r.id==id)?.name||'');
+ const gabarito=e=>`<details><summary>Ver questões e gabarito</summary><ol class="gab">${e.qs.map(q=>`<li>${esc(q.t)}<br><span class="mut">${q.o.map((o,i)=>i==q.a?`<b style="color:var(--ok)">(${ABCD[i]}) ${esc(o)}</b>`:`(${ABCD[i]}) ${esc(o)}`).join(' · ')}</span></li>`).join('')}</ol></details>`;
+ const resultados=e=>{const rs=allProg.filter(a=>a.exams?.[e.id]);
+  return rs.length?'<table>'+rs.map(a=>{const r=a.exams[e.id];return `<tr><td>${nome(a.id)}</td><td>${r.ok!=null?r.ok+'/'+r.tot+' ('+Math.round(100*r.ok/r.tot)+'%)':'iniciada, não concluída'}</td></tr>`}).join('')+'</table>':'<div class="mut">Ninguém fez ainda.</div>';};
+ let h='<div class="mut" style="margin-top:8px">Para aplicar uma prova, libere-a para cada aluno na aba <b>Alunos</b>.</div><h2>Provas prontas</h2>';
+ for(const e of exams.filter(e=>e.pronta)){
+  h+=`<div class="card"><b>${esc(e.title)}</b> <span class="mut">· ${e.n} questões fixas</span>`;
+  h+=gabarito(e)+resultados(e)+'</div>';}
+ h+=`<h2>Criar prova sorteada</h2><div class="card"><input type="text" id="et" placeholder="Título (ex.: Prova 1 – Notas)"><div style="margin:8px 0">${KEYS.map(m=>`<label><input type="checkbox" data-em="${m}"> ${MODS[m].t}</label>`).join('<br>')}</div>Questões: <input type="number" id="en" value="10" min="3" max="30" style="width:70px"> <button class="pri" data-mkexam>Criar prova</button></div><h2>Provas criadas</h2>`;
+ const criadas=exams.filter(e=>!e.pronta);
+ if(!criadas.length)h+='<div class="card mut">Nenhuma prova criada.</div>';
+ for(const e of criadas){
+  h+=`<div class="card"><b>${esc(e.title)}</b> <span class="mut">· ${e.n} questões · ${e.qs?'questões fixas':(e.mods||[]).map(m=>MODS[m]?.t).join(', ')}</span>${e.qs?gabarito(e):''}<div style="margin:6px 0">${edelId==e.id?`<span class="mut">Excluir?</span> <button data-edelyes="${e.id}">Sim</button> <button data-edelno>Não</button>`:`<button data-edel="${e.id}">excluir</button>`}</div>`;
+  h+=resultados(e)+'</div>';}
  return h;
 }
 function lesson(){
  view='lesson';
- $.innerHTML=`<button data-home>← Voltar</button><h2>Lição: símbolos musicais</h2>${SYM.map(s=>`<div class="card" style="display:flex;gap:12px;align-items:center">${s.svg.replace('width="160"','width="110"')}<div><b>${s.n}</b><div class="mut">${s.d}</div></div></div>`).join('')}<button class="pri" data-start2="simbolos">Praticar agora</button>`;
+ $.innerHTML=`<button data-trilha>← Trilha</button><h2>Lição: símbolos musicais</h2>${SYM.map(s=>`<div class="card" style="display:flex;gap:12px;align-items:center">${s.svg.replace('width="160"','width="110"')}<div><b>${s.n}</b><div class="mut">${s.d}</div></div></div>`).join('')}<button class="pri" data-trilha>Ir para a trilha</button>`;
 }
-function start(m,f){
- if(m=='simbolos'&&!f){lesson();return;}
- {const o=P.stats[m]||{ok:0,tot:0,hist:[],r:0};o.s=(o.s||0)+1;P.stats[m]=o;}
- curMod=m;exm=null;Q=Array.from({length:10},()=>({...gen(m),m}));qi=0;okc=0;view='quiz';showQ();
-}
+// Todo módulo agora é uma trilha: abrir o card mostra os níveis.
+function start(m){curTr=ALIAS[m]||m;view='trilha';draw();scrollTo(0,0);}
 async function startExam(id){
  if(owner){toast('A professora não faz as provas.');return;}
  const r=await api('startExam',{eid:id});
  if(r.error){toast(r.error=='ja_feita'?'Você já fez esta prova.':r.error);await refresh();return;}
  P.exams[id]={start:Date.now()};exm={id,...r.exam};curMod='';
- ANS=[];Q=exm.qs?exm.qs.map(q=>({...q,m:'prova'})):Array.from({length:exm.n},()=>{const m=rnd(exm.mods);return{...gen(m),m}});qi=0;okc=0;view='quiz';showQ();
+ if(exm.qs){exm.ans=[];Q=exm.qs.map(q=>({text:q.t,opts:q.o,ans:-1,m:'prova'}));}
+ else Q=Array.from({length:exm.n},()=>{const m=rnd(exm.mods);return{...gen(m),m}});
+ qi=0;okc=0;view='quiz';showQ();
 }
 function showQ(){
  const q=Q[qi];done=false;
- P.cur={t:exm?exm.title:MODS[curMod].t,q:qi+1,n:Q.length,ts:Date.now()};saveP();
- $.innerHTML=`${exm?'':'<button data-home>← Voltar</button>'}<div class="card q"><div class="mut">${exm?esc(exm.title):MODS[curMod].t} · questão ${qi+1} de ${Q.length}</div>${q.svg||''}<h2>${esc(q.text)}</h2><div class="opts">${q.opts.map((o,i)=>`<button data-ans="${i}">${esc(o)}</button>`).join('')}</div><div class="fb" id="fb"></div><div id="nx"></div></div>`;
+ P.cur={t:exm?exm.title:modT(curMod),q:qi+1,n:Q.length,ts:Date.now()};saveP();
+ $.innerHTML=`${exm?'':curMod.startsWith('t:')?'<button data-trilha>← Trilha</button>':'<button data-home>← Voltar</button>'}<div class="card q"><div class="mut">${exm?esc(exm.title):modT(curMod)} · questão ${qi+1} de ${Q.length}</div>${curMod.startsWith('t:')&&!exm?`<div class="qbar"><i style="width:${Math.round(100*qi/Q.length)}%"></i></div>`:''}${q.svg||''}<h2>${esc(q.text)}</h2><div class="opts${q.opts.some(o=>String(o).length>22)?' col':''}">${q.opts.map((o,i)=>`<button data-ans="${i}">${exm&&exm.qs?'('+ABCD[i]+') ':''}${esc(o)}</button>`).join('')}</div><div class="fb" id="fb"></div><div id="nx"></div></div>`;
 }
 function answer(i){
  if(done)return;done=true;const q=Q[qi],bs=$.querySelectorAll('[data-ans]');
- if(exm&&exm.qs){ANS.push(i);next();return;}
+ if(exm&&exm.qs){exm.ans[qi]=i;next();return;}
  if(i==q.ans)okc++;else addErr(q.m,q.tag||q.text.slice(0,60));
  if(exm){next();return;}
  bs[q.ans].classList.add('ok');if(i!=q.ans)bs[i].classList.add('bad');
@@ -252,29 +389,44 @@ function answer(i){
 async function next(){
  if(qi<Q.length-1){qi++;showQ();return;}
  const tot=Q.length,p=Math.round(100*okc/tot);
- if(exm){P.cur=null;if(exm.qs){const fr=await api('finishExam',{eid:exm.id,answers:ANS});okc=fr.ok||0;if(fr.err)P.err=fr.err;}else await api('finishExam',{eid:exm.id,ok:okc,tot,err:P.err});P.exams[exm.id]={ok:okc,tot,ts:Date.now()};
+ if(exm&&exm.qs){sendExam();return;}
+ if(exm){P.cur=null;P.exams[exm.id]={ok:okc,tot,ts:Date.now()};await api('finishExam',{eid:exm.id,ok:okc,tot,err:P.err});
   $.innerHTML=`<div class="card q"><h1>Prova concluída</h1><p>Você acertou ${okc} de ${tot}.</p><button class="pri" data-home>Início</button></div>`;exm=null;return;}
  P.cur=null;await saveRound(curMod,okc,tot);
- $.innerHTML=`<div class="card q"><h1>${p>=80?'🎉':'💪'} ${okc} de ${tot}</h1><p>${p>=80?'Muito bem! Avise a professora para liberar o próximo exercício.':p>=50?'Bom caminho! Repita para fixar.':'Vamos revisar com a professora e tentar de novo.'}</p><button class="pri" data-start2="${curMod}">Repetir</button> <button data-home>Início</button></div>`;
+ const k=curTr,i=curLvl,pass=p>=META,nx=TR[k].lv[i+1];
+ $.innerHTML=`<div class="card q"><h1>${pass?'🎉':'💪'} ${okc} de ${tot}</h1><p>${pass?(nx?`Nível concluído! Abriu o próximo: <b>${esc(nx.t)}</b>`:`Parabéns, você completou a trilha de ${esc(MODS[k].t)}! 🏆`):`Faltou pouco! Você precisa de ${Math.ceil(META*tot/100)} acertos para abrir o próximo nível.`}</p>${pass&&nx?`<button class="pri" data-lvl="${k}|${i+1}">Próximo nível</button> `:''}<button ${pass?'':'class="pri"'} data-lvl="${k}|${i}">${pass?'Repetir':'Tentar de novo'}</button> <button data-trilha>Ver trilha</button></div>`;
+}
+async function sendExam(){
+ $.innerHTML='<div class="card q"><p>Enviando a prova…</p></div>';
+ const r=await api('finishExam',{eid:exm.id,ans:exm.ans});
+ if(r.error||r.ok==null){$.innerHTML=`<div class="card q"><h2>Não foi possível enviar</h2><p class="mut">${esc(r.error||'Tente de novo.')}</p><button class="pri" data-resend>Tentar enviar de novo</button></div>`;return;}
+ P.cur=null;P.exams[exm.id]={ok:r.ok,tot:r.tot,ts:Date.now()};
+ $.innerHTML=`<div class="card q"><h1>Prova concluída</h1><p>Você acertou ${r.ok} de ${r.tot}.</p><button class="pri" data-home>Início</button></div>`;exm=null;
 }
 const toast=t=>{const e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',3500);};
 const val=i=>(document.getElementById(i)||{}).value||'';
 document.addEventListener('click',async e=>{
- const t=e.target.closest('button,[data-start],[data-exam]');if(!t)return;const d=t.dataset;
+ const t=e.target.closest('button,[data-start],[data-exam],[data-open]');if(!t)return;const d=t.dataset;
  const A=async(a,b,ok)=>{const r=await api(a,b);if(r.error)toast(r.error);else if(ok)toast(ok);await refresh();return r;};
  if(d.start)start(d.start);
- else if(d.start2)start(d.start2,1);
+ else if(d.lesson!=null)lesson();
  else if(d.exam)startExam(d.exam);
  else if(d.ans!=null)answer(+d.ans);
  else if(d.next!=null)next();
+ else if(d.lvl!=null){const[k,i]=d.lvl.split('|');startLvl(k,+i);}
+ else if(d.trilha!=null){view='trilha';draw();scrollTo(0,0);}
+ else if(d.resend!=null)sendExam();
+ else if(d.open){openStu=openStu==d.open?null:d.open;rmId=null;draw();}
  else if(d.home!=null){view='home';exm=null;await refresh();}
  else if(d.tab){tab=d.tab;draw();}
  else if(d.refresh!=null){await refresh();toast('Atualizado.');}
- else if(d.login!=null){const r=await api('login',{login:val('lg'),password:val('pw')});
+ else if(d.install!=null){if(instEv){instEv.prompt();await instEv.userChoice.catch(()=>{});instEv=null;}draw();}
+ else if(d.instno!=null){instHide=true;draw();}
+ else if(d.login!=null){instHide=false;const r=await api('login',{login:val('lg'),password:val('pw')});
   if(r.error){document.getElementById('lerr').textContent=r.error;return;}
   TOKEN=r.token;try{sessionStorage.setItem('tk',TOKEN)}catch(e){}view='home';await refresh();}
  else if(d.logout!=null)logout();
- else if(d.add!=null){const r=await A('addStudent',{name:val('nn'),login:val('nl'),password:val('np'),start:val('nd')},'Aluna cadastrada.');}
+ else if(d.add!=null){const r=await A('addStudent',{name:val('nn'),login:val('nl'),password:val('np'),start:val('nd')},'Aluno cadastrado.');}
  else if(d.edit){editId=d.edit;rmId=null;draw();}
  else if(d.cancel!=null){editId=null;draw();}
  else if(d.save){const r=await A('editStudent',{id:d.save,name:val('ef-n'),login:val('ef-l'),password:val('ef-p'),start:val('ef-d')},'Salvo.');if(!r.error)editId=null;draw();}
@@ -282,7 +434,6 @@ document.addEventListener('click',async e=>{
  else if(d.rmno!=null){rmId=null;draw();}
  else if(d.rmyes){await A('removeStudent',{id:d.rmyes});rmId=null;draw();}
  else if(d.reset){const[u,id]=d.reset.split('|');await A('resetExam',{id:u,eid:id},'Nova tentativa liberada.');}
- else if(d.addp!=null){const p=PRONTAS[+d.addp];await A('createExam',{title:p.t,qs:p.qs},'Prova adicionada. Libere quando quiser.');}
  else if(d.mkexam!=null){const mods=[...document.querySelectorAll('[data-em]:checked')].map(x=>x.dataset.em);
   await A('createExam',{title:val('et'),mods,n:+val('en')||10},'Prova criada.');}
  else if(d.edel){edelId=d.edel;draw();}
@@ -290,9 +441,25 @@ document.addEventListener('click',async e=>{
  else if(d.edelyes){await A('deleteExam',{eid:d.edelyes});edelId=null;draw();}
 });
 document.addEventListener('change',async e=>{const d=e.target.dataset;
- if(d.unl){const[id,m]=d.unl.split('|');const cur=allUnl[id]||['notas_sol'];const next=e.target.checked?[...new Set([...cur,m])]:cur.filter(x=>x!==m);
-  allUnl[id]=next;await api('setUnl',{id,mods:next});}
- else if(d.eopen){await api('setExamOpen',{eid:d.eopen,open:e.target.checked});await refresh();}
+ if(d.unl){const[id,m]=d.unl.split('|');const cur=allUnl[id]||['notas'];const next=e.target.checked?[...new Set([...cur,m])]:cur.filter(x=>x!==m);
+  allUnl[id]=next;draw();const r=await api('setUnl',{id,mods:next});if(r.error){toast(r.error);await refresh();}}
 });
+/* ---------- instalar no celular ---------- */
+// Aviso mostrado depois do login para instalar o app na tela inicial. "Agora não" esconde até o próximo login.
+let instEv=null,instHide=false;
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const isMobile=isIOS||/android|mobile/i.test(navigator.userAgent);
+function installCard(){
+ if(instHide||isStandalone()||(!instEv&&!isMobile))return '';
+ const como=instEv?'<button class="pri" data-install>📲 Instalar o app</button>'
+  :isIOS?'<div class="mut">No iPhone: toque em <b>Compartilhar</b> (o quadrado com a seta ↑) e depois em <b>Adicionar à Tela de Início</b>.</div>'
+  :'<div class="mut">No menu do navegador (⋮), toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</div>';
+ return `<div class="card install"><b>📲 Baixe o app no seu celular</b><div class="mut" style="margin:4px 0 10px">Assim você abre a Teoria Musical direto pela tela inicial, como um aplicativo.</div>${como} <button data-instno style="margin-top:8px">Agora não</button></div>`;
+}
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;draw();});
+addEventListener('appinstalled',()=>{instEv=null;instHide=true;toast('App instalado! 🎉');draw();});
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+
 init();
 </script></body></html>
