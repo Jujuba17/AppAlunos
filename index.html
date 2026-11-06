@@ -8,7 +8,13 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Teoria Musical">
+<!-- fonte com os símbolos musicais (claves, sustenido, bemol...), para não depender das fontes do aparelho -->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Music&display=block">
+<!-- aplica o tema escolhido (claro/escuro) antes de desenhar a página, para não piscar -->
+<script>try{var t=localStorage.getItem('tema');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <style>
+#tema{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:12px;z-index:8;width:42px;height:42px;border-radius:50%;padding:0;font-size:19px;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.15)}
 .install{border-color:var(--ac);border-width:2px}
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#faf8f5;--fg:#2a2622;--card:#fff;--mut:#7a726a;--ac:#7c3aed;--ok:#16a34a;--bad:#dc2626;--bd:#e5ded5}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1a18;--fg:#f1ece6;--card:#292623;--mut:#a69d93;--ac:#a78bfa;--ok:#4ade80;--bad:#f87171;--bd:#3d3834}}
@@ -51,7 +57,7 @@ label{display:inline-flex;gap:4px;align-items:center;margin-right:8px;font-size:
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 .node-lbl{max-width:230px;margin-top:8px;font-size:14px}
 .qbar{height:10px;background:var(--bd);border-radius:9px;overflow:hidden;margin:8px 0 4px}.qbar i{display:block;height:100%;background:var(--ok);transition:width .3s}
-</style></head><body><main id="app">Carregando…</main><div id="toast"></div>
+</style></head><body><button id="tema" type="button"></button><main id="app">Carregando…</main><div id="toast"></div>
 <script>
 const N=['Dó','Ré','Mi','Fá','Sol','Lá','Si'];
 const MODS={
@@ -89,31 +95,33 @@ const G=(c,z,y)=>`<svg viewBox="0 0 160 100" width="160"><text x="80" y="${y}" f
 const hd=(x,y)=>`<ellipse cx="${x}" cy="${y}" rx="8" ry="5.5" transform="rotate(-20 ${x} ${y})" fill="currentColor"/><line x1="${x+7}" x2="${x+7}" y1="${y-2}" y2="${y-38}" stroke="currentColor" stroke-width="2"/>`;
 const V=b=>`<svg viewBox="0 0 160 100" width="160">${b}</svg>`;
 const SYM=[
- {n:'Clave de Sol',d:'Indica que a 2ª linha da pauta é a nota Sol.',svg:G('\u{1D11E}',90,80)},
- {n:'Clave de Fá',d:'Indica que a 4ª linha da pauta é a nota Fá.',svg:G('\u{1D122}',70,62)},
- {n:'Clave de Dó',d:'Indica onde fica a nota Dó; usada, por exemplo, pela viola.',svg:G('\u{1D121}',70,70)},
- {n:'Fermata',d:'Prolonga a duração da nota ou da pausa, a critério do intérprete.',svg:V('<path d="M50 60 Q80 8 110 60" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="80" cy="46" r="4.5" fill="currentColor"/>')},
- {n:'Ligadura',d:'Une notas somando seus valores (se forem iguais) ou indica que sejam tocadas sem separação.',svg:V(hd(45,55)+hd(115,55)+'<path d="M45 66 Q80 92 115 66" fill="none" stroke="currentColor" stroke-width="2.5"/>')},
- {n:'Ponto de aumento',d:'Colocado após a figura, aumenta metade do seu valor.',svg:V(hd(65,62)+'<circle cx="90" cy="62" r="3.5" fill="currentColor"/>')},
- {n:'Sustenido',d:'Sobe a nota meio tom.',svg:G('\u266F',80,75)},
- {n:'Bemol',d:'Desce a nota meio tom.',svg:G('\u266D',80,75)},
- {n:'Bequadro',d:'Cancela um sustenido ou bemol anterior.',svg:G('\u266E',80,75)}];
+ {n:'Clave de Sol',d:'Indica que a 2ª linha da pauta é a nota Sol.',q:'Qual clave indica que a 2ª linha da pauta é a nota Sol?',svg:G('\u{1D11E}',90,80)},
+ {n:'Clave de Fá',d:'Indica que a 4ª linha da pauta é a nota Fá.',q:'Qual clave indica que a 4ª linha da pauta é a nota Fá?',svg:G('\u{1D122}',70,62)},
+ {n:'Clave de Dó',d:'Indica onde fica a nota Dó; usada, por exemplo, pela viola.',q:'Qual clave indica onde fica a nota Dó e é usada, por exemplo, pela viola?',svg:G('\u{1D121}',70,70)},
+ {n:'Fermata',d:'Prolonga a duração da nota ou da pausa, a critério do intérprete.',q:'Qual símbolo prolonga a duração da nota ou da pausa, a critério do intérprete?',svg:V('<path d="M50 60 Q80 8 110 60" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="80" cy="46" r="4.5" fill="currentColor"/>')},
+ {n:'Ligadura',d:'Une notas somando seus valores (se forem iguais) ou indica que sejam tocadas sem separação.',q:'Qual símbolo une notas iguais somando seus valores, ou indica que sejam tocadas sem separação?',svg:V(hd(45,55)+hd(115,55)+'<path d="M45 66 Q80 92 115 66" fill="none" stroke="currentColor" stroke-width="2.5"/>')},
+ {n:'Ponto de aumento',d:'Colocado após a figura, aumenta metade do seu valor.',q:'Qual símbolo, colocado depois da figura, aumenta metade do seu valor?',svg:V(hd(65,62)+'<circle cx="90" cy="62" r="3.5" fill="currentColor"/>')},
+ {n:'Sustenido',d:'Sobe a nota meio tom.',q:'Qual símbolo sobe a nota meio tom?',svg:G('\u266F',80,75)},
+ {n:'Bemol',d:'Desce a nota meio tom.',q:'Qual símbolo desce a nota meio tom?',svg:G('\u266D',80,75)},
+ {n:'Bequadro',d:'Cancela um sustenido ou bemol anterior.',q:'Qual símbolo cancela um sustenido ou bemol anterior?',svg:G('\u266E',80,75)}];
 function genS(list){list=list||SYM;const S=rnd(list);const o=shuf([...shuf(list.map(x=>x.n).filter(x=>x!=S.n)).slice(0,3),S.n]);
  if(Math.random()<.5)return{svg:S.svg,text:'Qual é o nome deste símbolo?',opts:o,ans:o.indexOf(S.n),tag:S.n};
- return{text:'Que símbolo é este? '+S.d,opts:o,ans:o.indexOf(S.n),tag:S.n};}
+ return{text:S.q,opts:o,ans:o.indexOf(S.n),tag:S.n};} // pergunta só com palavras (sem desenho)
 const symL=(...ns)=>SYM.filter(s=>ns.includes(s.n));
 
 /* ---------- notas ---------- */
 // Posição na pauta: 0 = 1ª linha, 1 = 1º espaço, 2 = 2ª linha ... 8 = 5ª linha; negativos e >8 usam linhas suplementares.
 let lastN=null;
 const R=(a,b)=>Array.from({length:b-a+1},(_,i)=>a+i);
-const pos=n=>n%2==0?(n/2+1)+'ª linha':((n-1)/2+1)+'º espaço';
 function genLvl(L){
  const sol=L.c=='sol'||(L.c=='mix'&&Math.random()<.5),cl=sol?'Sol':'Fá',nm=i=>N[md(i+(sol?2:4),7)];
  let n;do{n=rnd(L.ns)}while(n===lastN&&L.ns.length>1);lastN=n;
- if((L.k=='onde'||(L.k=='mix'&&Math.random()<.3))&&n>=0&&n<=8){
-  const o=shuf([n,...shuf(R(0,8).filter(x=>nm(x)!=nm(n))).slice(0,3)]);
-  return{text:`Na clave de ${cl}, onde fica a nota ${nm(n)}?`,opts:o.map(pos),ans:o.indexOf(n),tag:'Onde fica · '+cl+' · '+nm(n)};}
+ // "Nota vizinha": cada pergunta tem uma única resposta certa
+ if(L.k=='viz'||(L.k=='mix'&&Math.random()<.3)){
+  if(Math.random()<.35){const i=Math.floor(Math.random()*7),dep=Math.random()<.5;
+   return{text:`Qual nota vem logo ${dep?'depois':'antes'} de ${N[i]}?`,opts:N,ans:md(i+(dep?1:-1),7),tag:'Sequência · '+(dep?'depois de ':'antes de ')+N[i]};}
+  const up=Math.random()<.5;
+  return{svg:staff(sol?'sol':'fa',n),text:`Qual é a nota logo ${up?'acima':'abaixo'} desta na pauta?`,opts:N,ans:md(n+(up?1:-1)+(sol?2:4),7),tag:'Vizinha · '+cl+' · '+(up?'acima de ':'abaixo de ')+nm(n)};}
  return{svg:staff(sol?'sol':'fa',n),text:'Qual é o nome desta nota?',opts:N,ans:md(n+(sol?2:4),7),tag:cl+' · '+nm(n)};
 }
 
@@ -175,14 +183,15 @@ const TR={
   {id:'s2',u:0,t:'Lá, Si e Dó',d:'Subindo a pauta',c:'sol',ns:R(0,5)},
   {id:'s3',u:0,t:'Notas nas linhas',d:'Mi, Sol, Si, Ré e Fá',c:'sol',ns:[0,2,4,6,8]},
   {id:'s4',u:0,t:'Notas nos espaços',d:'Fá, Lá, Dó e Mi',c:'sol',ns:[1,3,5,7]},
-  {id:'s5',u:0,t:'Onde fica a nota?',d:'Linha ou espaço',c:'sol',ns:R(0,8),k:'onde'},
+  {id:'s5',u:0,t:'Nota vizinha',d:'A nota logo acima ou abaixo',c:'sol',ns:R(0,8),k:'viz'},
   {id:'s6',u:0,t:'Pauta inteira',d:'Todas as notas da pauta',c:'sol',ns:R(-2,9)},
   {id:'s7',u:0,t:'Linhas suplementares',d:'Notas acima e abaixo da pauta',c:'sol',ns:[-4,-3,-2,-1,9,10,11,12]},
   {id:'f1',u:1,t:'Primeiras notas',d:'Sol, Lá, Si, Dó e Ré',c:'fa',ns:R(0,4)},
   {id:'f2',u:1,t:'Notas nas linhas',d:'Sol, Si, Ré, Fá e Lá',c:'fa',ns:[0,2,4,6,8]},
   {id:'f3',u:1,t:'Notas nos espaços',d:'Lá, Dó, Mi e Sol',c:'fa',ns:[1,3,5,7]},
-  {id:'f4',u:1,t:'Onde fica a nota?',d:'Linha ou espaço na clave de Fá',c:'fa',ns:R(0,8),k:'onde'},
+  {id:'f4',u:1,t:'Nota vizinha',d:'A nota logo acima ou abaixo, na clave de Fá',c:'fa',ns:R(0,8),k:'viz'},
   {id:'f5',u:1,t:'Pauta inteira',d:'Todas as notas, com o Dó central',c:'fa',ns:R(-2,10)},
+  {id:'f6',u:1,t:'Linhas suplementares',d:'Notas acima e abaixo da pauta da clave de Fá',c:'fa',ns:[-4,-3,-2,-1,9,10,11,12]},
   {id:'d1',u:2,t:'Sol ou Fá?',d:'As duas claves misturadas',c:'mix',ns:R(-2,9)},
   {id:'d2',u:2,t:'Desafio final',d:'Tudo junto, 15 questões',c:'mix',ns:R(-4,12),k:'mix',n:15}]},
  figuras:{units:[['Conhecendo as figuras','Nome e valor de cada uma'],['Comparando figuras','Quem dura mais e quantas cabem'],['Desafio','Tudo junto']],lv:[
@@ -211,7 +220,9 @@ const TR={
   {id:'sb3',u:0,t:'Sinais de duração',d:'Fermata, ligadura e ponto de aumento',g:()=>genS(symL('Fermata','Ligadura','Ponto de aumento'))},
   {id:'sb4',u:1,t:'Todos os símbolos',d:'Tudo junto, 15 questões',n:15,mix:1}]}};
 const ALL={};for(const k in TR)TR[k].lv.forEach((L,i)=>{L.tr=k;L.i=i;ALL[L.id]=L;});
-const genQ=L=>L.mix?genQ(rnd(TR[L.tr].lv.filter(x=>!x.mix))):L.g?L.g():genLvl(L);
+// Embaralha as alternativas (e acerta o índice da resposta), para o aluno ler em vez de decorar a posição do botão.
+const embaralha=q=>{const p=shuf(q.opts.map((_,i)=>i));return{...q,opts:p.map(i=>q.opts[i]),ans:p.indexOf(q.ans)};};
+const genQ=L=>embaralha(L.mix?genQ(rnd(TR[L.tr].lv.filter(x=>!x.mix))):L.g?L.g():genLvl(L));
 // provas sorteadas: sorteia um nível qualquer do módulo (aceita também os nomes antigos de módulo)
 const gen=m=>{m=ALIAS[m]||m;return TR[m]?genQ(rnd(TR[m].lv)):genS();};
 
@@ -444,6 +455,14 @@ document.addEventListener('change',async e=>{const d=e.target.dataset;
  if(d.unl){const[id,m]=d.unl.split('|');const cur=allUnl[id]||['notas'];const next=e.target.checked?[...new Set([...cur,m])]:cur.filter(x=>x!==m);
   allUnl[id]=next;draw();const r=await api('setUnl',{id,mods:next});if(r.error){toast(r.error);await refresh();}}
 });
+/* ---------- tema claro / escuro ---------- */
+// Sem escolha salva, segue o tema do aparelho. O botão mostra o sol no escuro (vai para o claro) e a lua no claro.
+const temaEscuro=()=>{const t=document.documentElement.dataset.theme;return t?t=='dark':matchMedia('(prefers-color-scheme: dark)').matches;};
+function pintaTema(){const b=document.getElementById('tema'),d=temaEscuro();b.textContent=d?'☀️':'🌙';b.title=d?'Mudar para o tema claro':'Mudar para o tema escuro';b.setAttribute('aria-label',b.title);}
+document.getElementById('tema').addEventListener('click',()=>{const t=temaEscuro()?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('tema',t)}catch(e){}pintaTema();});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',pintaTema);
+pintaTema();
+
 /* ---------- instalar no celular ---------- */
 // Aviso mostrado depois do login para instalar o app na tela inicial. "Agora não" esconde até o próximo login.
 let instEv=null,instHide=false;
