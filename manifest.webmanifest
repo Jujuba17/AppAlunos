@@ -1,0 +1,20 @@
+{
+  "name": "Teoria Musical",
+  "short_name": "Teoria Musical",
+  "description": "Exercícios de teoria musical em trilhas por níveis, provas e acompanhamento da professora.",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf8f5",
+  "theme_color": "#7c3aed",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["education", "music"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
