@@ -127,7 +127,21 @@ module.exports = async (req, res) => {
         role: 'prof', name: 'Professora', allUnl, allProg,
         roster: ids.map((i) => ({ id: i, name: roster[i].name, login: roster[i].login, start: roster[i].start || '' })),
         exams: Object.entries(exams).map(([id, e]) => ({ id, ...e })),
+        accReset: (await redis.get('accReset')) || null,
       });
+    }
+    if (action === 'resetAccess') {
+      // Zera só a contagem de acessos (último acesso, nº de acessos, primeiro acesso) de todos os alunos.
+      // Exercícios, provas e liberações continuam como estão.
+      const progs = ids.length ? await redis.mget(...ids.map((i) => 'prog:' + i)) : [];
+      await Promise.all(ids.map((i, k) => {
+        const p = progs[k]; if (!p) return null;
+        delete p.acc; delete p.first; p.accN = 0;
+        return redis.set('prog:' + i, p);
+      }));
+      const ts = Date.now();
+      await redis.set('accReset', ts);
+      return res.json({ ok: true, accReset: ts });
     }
     if (action === 'addStudent') {
       const name = String(b.name || '').trim(), login = String(b.login || '').trim().toLowerCase(), pw = String(b.password || '');

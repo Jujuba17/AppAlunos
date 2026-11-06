@@ -248,7 +248,7 @@ const modT=m=>{if(m.startsWith('t:')){const L=ALL[m.slice(2)];return MODS[L.tr].
 
 /* ---------- estado e dados ---------- */
 let curLvl=0,curTr='notas',TOKEN=null,owner=false,NAME='',unl=['notas'],tab='praticar',view='home',prev=false;
-let P={stats:{},err:{},exams:{}},allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
+let accReset=null,accRstAsk=false,P={stats:{},err:{},exams:{}},allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
 const pct=s=>s&&s.tot?Math.round(100*s.ok/s.tot):null;
 try{TOKEN=sessionStorage.getItem('tk')}catch(e){}
 async function api(action,body){
@@ -264,7 +264,7 @@ async function refresh(){
  if(!TOKEN){draw();return;}
  const r=await api('me');if(r.error||!TOKEN)return;
  owner=r.role=='prof';NAME=r.name;
- if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
+ if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;accReset=r.accReset||null;allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
  else{unl=normU(r.unl);exams=r.exams;P={stats:r.prog.stats||{},err:r.prog.err||{},exams:r.prog.exams||{},cur:r.prog.cur};}
  draw();
 }
@@ -341,12 +341,16 @@ function stuBody(r,a,un){
 function alunas(){
  let h=`<h2>Cadastrar aluno</h2><div class="card"><input type="text" id="nn" placeholder="Nome do aluno"> <input type="text" id="nl" placeholder="Login (ex.: ana)" autocapitalize="none"> <input type="text" id="np" placeholder="Senha"> <label>Início: <input type="date" id="nd"></label> <button class="pri" data-add>Cadastrar</button><div class="mut" style="margin-top:6px">O aluno entra com esse login e senha. Anote a senha: depois dela salva você só pode redefinir.</div></div><h2>Alunos</h2>`;
  if(!roster.length)h+='<div class="card mut">Nenhum aluno cadastrado.</div>';
- else h+='<div class="mut">Clique no aluno para ver exercícios, provas e respostas.</div>';
+ else{
+  // contagem de acessos: quantos entraram desde a última vez que a professora zerou
+  const entraram=roster.filter(r=>allProg.find(x=>x.id==r.id)?.acc).length;
+  h+=`<div class="card"><b>Acessos</b> <span class="mut">${accReset?'· contando desde '+fmtDT(accReset):'· contando desde o início'}</span><div style="margin:4px 0 8px">${entraram} de ${roster.length} aluno(s) entraram${accReset?' desde então':''}.</div>${accRstAsk?`<span class="mut">Zerar o último acesso e o nº de acessos de todos? Exercícios e provas não mudam.</span> <button data-accrstyes>Sim, zerar</button> <button data-accrstno>Não</button>`:`<button data-accrst>Zerar acessos</button>`}</div>`;
+  h+='<div class="mut">Clique no aluno para ver exercícios, provas e respostas.</div>';}
  for(const r of roster){
   const u=r.id,a=allProg.find(x=>x.id==u),un=allUnl[u]||['notas'],isOpen=openStu==u;
   if(editId==u){h+=editForm(r);continue;}
   const feitas=exams.filter(e=>a?.exams?.[e.id]?.ok!=null).length,lib=exams.filter(e=>un.includes(e.id)).length;
-  h+=`<div class="card"><div class="mod" data-open="${u}"><div><b>${esc(r.name)}</b><div class="mut">${a?.acc?'Último acesso: '+fmtDT(a.acc):'Ainda não acessou'} · provas: ${feitas} feita(s) de ${lib} liberada(s)</div></div><span class="pill">${isOpen?'▾ fechar':'▸ abrir'}</span></div>`;
+  h+=`<div class="card"><div class="mod" data-open="${u}"><div><b>${esc(r.name)}</b><div class="mut">${a?.acc?'Último acesso: '+fmtDT(a.acc):accReset?'Não entrou desde '+fmtDT(accReset):'Ainda não acessou'} · provas: ${feitas} feita(s) de ${lib} liberada(s)</div></div><span class="pill">${isOpen?'▾ fechar':'▸ abrir'}</span></div>`;
   if(isOpen)h+=stuBody(r,a,un);
   h+='</div>';}
  return h;
@@ -444,6 +448,9 @@ document.addEventListener('click',async e=>{
  else if(d.rm){rmId=d.rm;editId=null;draw();}
  else if(d.rmno!=null){rmId=null;draw();}
  else if(d.rmyes){await A('removeStudent',{id:d.rmyes});rmId=null;draw();}
+ else if(d.accrst!=null){accRstAsk=true;draw();}
+ else if(d.accrstno!=null){accRstAsk=false;draw();}
+ else if(d.accrstyes!=null){accRstAsk=false;await A('resetAccess',{},'Acessos zerados. A contagem começa agora.');}
  else if(d.reset){const[u,id]=d.reset.split('|');await A('resetExam',{id:u,eid:id},'Nova tentativa liberada.');}
  else if(d.mkexam!=null){const mods=[...document.querySelectorAll('[data-em]:checked')].map(x=>x.dataset.em);
   await A('createExam',{title:val('et'),mods,n:+val('en')||10},'Prova criada.');}
