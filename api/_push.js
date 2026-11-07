@@ -1,12 +1,21 @@
 // Envio de notificações (Web Push) para os aparelhos de um aluno.
 // O "_" no nome impede que a Vercel crie um endereço para este arquivo.
 // Precisa das variáveis VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY (veja o README); sem elas, nada é enviado.
-const webpush = require('web-push');
+let webpush = null;
+try { webpush = require('web-push'); } catch (e) { console.error('web-push não instalado', e.message); }
 
-const PUB = process.env.VAPID_PUBLIC_KEY || '';
-const PRIV = process.env.VAPID_PRIVATE_KEY || '';
-const ativo = !!(PUB && PRIV);
-if (ativo) webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:professora@example.com', PUB, PRIV);
+// Limpa o que costuma vir junto ao colar na Vercel: espaços, quebras de linha e aspas.
+const limpa = (v) => String(v || '').trim().replace(/^["']|["']$/g, '').trim();
+const PUB = limpa(process.env.VAPID_PUBLIC_KEY);
+const PRIV = limpa(process.env.VAPID_PRIVATE_KEY);
+let SUBJ = limpa(process.env.VAPID_SUBJECT).replace(/^mailto:\s*/i, 'mailto:');
+if (SUBJ && !/^(mailto:|https:\/\/)/i.test(SUBJ)) SUBJ = 'mailto:' + SUBJ; // aceita só o e-mail, sem o "mailto:"
+// Se alguma chave estiver errada, as notificações ficam desligadas, mas o resto do app continua funcionando.
+let ativo = false, erro = null;
+if (PUB && PRIV && webpush) {
+  try { webpush.setVapidDetails(SUBJ || 'mailto:professora@example.com', PUB, PRIV); ativo = true; }
+  catch (e) { erro = e.message; console.error('Notificações desligadas: VAPID inválido –', e.message); }
+}
 
 // Guarda a inscrição de um aparelho (no máximo 5 por aluno; o mais antigo sai).
 async function inscrever(redis, id, sub) {
@@ -33,4 +42,4 @@ async function notificar(redis, id, payload) {
   return enviados;
 }
 
-module.exports = { ativo, PUB, inscrever, notificar };
+module.exports = { ativo, erro, PUB, inscrever, notificar };

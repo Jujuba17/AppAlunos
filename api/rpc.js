@@ -151,6 +151,7 @@ module.exports = async (req, res) => {
         roster: ids.map((i) => ({ id: i, name: roster[i].name, login: roster[i].login, start: roster[i].start || '' })),
         exams: Object.entries(exams).map(([id, e]) => ({ id, ...e })),
         pushOn: ids.filter((i, k) => pushes[k] && pushes[k].length),
+        pushErro: PUSH.erro, // chaves das notificações preenchidas com erro na Vercel
       });
     }
     if (action === 'addStudent') {

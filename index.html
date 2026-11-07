@@ -379,7 +379,7 @@ const modT=m=>{if(m.startsWith('t:')){const L=ALL[m.slice(2)];return MODS[L.tr].
 
 /* ---------- estado e dados ---------- */
 let curLvl=0,curTr='notas',TOKEN=null,owner=false,NAME='',unl=['notas'],tab='praticar',view='home',prev=false;
-let P={stats:{},err:{},exams:{}},news=[],pushKey=null,pushOn=[],pushHide=false,pushState='',allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
+let pushErro=null,P={stats:{},err:{},exams:{}},news=[],pushKey=null,pushOn=[],pushHide=false,pushState='',allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
 const pct=s=>s&&s.tot?Math.round(100*s.ok/s.tot):null;
 try{TOKEN=sessionStorage.getItem('tk')}catch(e){}
 async function api(action,body){
@@ -395,7 +395,7 @@ async function refresh(){
  if(!TOKEN){draw();return;}
  const r=await api('me');if(r.error||!TOKEN)return;
  owner=r.role=='prof';NAME=r.name;
- if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;pushOn=r.pushOn||[];allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
+ if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;pushOn=r.pushOn||[];pushErro=r.pushErro||null;allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
  else{unl=normU(r.unl);exams=r.exams;news=r.news||[];pushKey=r.pushKey||null;P={stats:r.prog.stats||{},err:r.prog.err||{},exams:r.prog.exams||{},cur:r.prog.cur,av:r.prog.av||{}};checkPush();}
  draw();
 }
@@ -473,6 +473,7 @@ function stuBody(r,a,un){
 }
 function alunas(){
  let h=`<h2>Cadastrar aluno</h2><div class="card"><input type="text" id="nn" placeholder="Nome do aluno"> <input type="text" id="nl" placeholder="Login (ex.: ana)" autocapitalize="none"> <input type="text" id="np" placeholder="Senha"> <label>Início: <input type="date" id="nd"></label> <button class="pri" data-add>Cadastrar</button><div class="mut" style="margin-top:6px">O aluno entra com esse login e senha. Anote a senha: depois dela salva você só pode redefinir.</div></div><h2 id="lista-alunos">Alunos</h2>`;
+ if(pushErro)h+=`<div class="card" style="border-color:var(--bad)"><b>⚠ Notificações desligadas</b><div class="mut">As chaves das notificações na Vercel (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY ou VAPID_SUBJECT) estão com erro: ${esc(pushErro)}. O resto do app funciona normalmente.</div></div>`;
  if(!roster.length)h+='<div class="card mut">Nenhum aluno cadastrado.</div>';
  else h+='<div class="mut">Clique no aluno para ver exercícios, provas e respostas. ⭐ = estrelas do aluno · 🔔 = recebe notificações no celular.</div>';
  for(const r of roster){
