@@ -56,12 +56,22 @@ label{display:inline-flex;gap:4px;align-items:center;margin-right:8px;font-size:
 .node.lock{background:var(--bd);color:var(--mut);cursor:default;box-shadow:none}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 .node-lbl{max-width:230px;margin-top:8px;font-size:14px}
+.av-card{display:flex;gap:14px;align-items:center}
+.stars{font-size:20px;font-weight:700}
+.av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin:8px 0}
+.av-opt{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:14px;padding:8px}
+.av-opt.on{border:2px solid var(--ac)}.av-opt:disabled{opacity:.55;cursor:default}
+.av-cats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.av-cats button{padding:8px 12px;font-size:14px}
+.av-cats button.on{background:var(--ac);color:#fff;border-color:var(--ac)}.av-cats button.on .mut{color:#fff;opacity:.85}
+.av-opt .sw{width:34px;height:34px;border-radius:50%;display:block;margin-bottom:4px}
+.news{border-color:var(--ok);border-width:2px}
+.node-st{font-size:12px;color:#ca8a04;font-weight:700}
 .qbar{height:10px;background:var(--bd);border-radius:9px;overflow:hidden;margin:8px 0 4px}.qbar i{display:block;height:100%;background:var(--ok);transition:width .3s}
 </style></head><body><button id="tema" type="button"></button><main id="app">Carregando…</main><div id="toast"></div>
 <script>
 const N=['Dó','Ré','Mi','Fá','Sol','Lá','Si'];
 const MODS={
- notas:{t:'Notas musicais',d:'Clave de Sol, clave de Fá e desafios',i:'🎵'},
+ notas:{t:'Notas musicais',d:'Clave de Sol, clave de Fá, sustenido e bemol',i:'🎵'},
  figuras:{t:'Figuras musicais',d:'Nome, valor, comparação e ponto de aumento',i:'🎶'},
  compasso:{t:'Compasso',d:'Compasso simples e composto',i:'🥁'},
  simbolos:{t:'Símbolos musicais',d:'Claves, acidentes, fermata, ligadura e ponto',i:'🔣'}};
@@ -74,19 +84,28 @@ const shuf=a=>a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(x=>x[1]);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ---------- desenho da pauta ---------- */
-function staff(clef,n,type){
+// acc = acidente desenhado antes da nota: '♯' (sustenido), '♭' (bemol) ou '♮' (bequadro)
+function staff(clef,n,type,acc){
  type=type||'q';const cx=clef?150:110,cy=80-5*n;let s='<svg viewBox="0 0 240 130" width="320" role="img" aria-label="pauta">';
  for(let i=0;i<5;i++)s+=`<line x1="10" x2="230" y1="${40+i*10}" y2="${40+i*10}" stroke="currentColor" stroke-width="1.2"/>`;
  if(clef){s+=`<text x="16" y="${clef=='sol'?88:72}" font-size="${clef=='sol'?64:52}" fill="currentColor" font-family="'Noto Music','Segoe UI Symbol','Apple Symbols',serif">${clef=='sol'?'\u{1D11E}':'\u{1D122}'}</text>`;
   s+=`<text x="16" y="124" font-size="11" fill="currentColor" opacity=".6">clave de ${clef=='sol'?'Sol':'Fá'}</text>`;}
  for(let k=-2;k>=n;k-=2)s+=led(cx,80-5*k);
  for(let k=10;k<=n;k+=2)s+=led(cx,80-5*k);
+ if(acc)s+=accSvg(cx-21,cy,acc,1);
  const open=type=='w'||type=='h',stem=type!='w',up=n<4;
  s+=`<ellipse cx="${cx}" cy="${cy}" rx="${type=='w'?8.5:7}" ry="5" transform="rotate(-20 ${cx} ${cy})" fill="${open?'none':'currentColor'}" stroke="currentColor" stroke-width="2"/>`;
  if(stem){const sx=up?cx+6.5:cx-6.5;s+=`<line x1="${sx}" x2="${sx}" y1="${cy+(up?-2:2)}" y2="${cy+(up?-35:35)}" stroke="currentColor" stroke-width="1.6"/>`;
   const fl=type=='e'?1:type=='s'?2:0;
   for(let f=0;f<fl;f++){const t=cy-35+f*8;s+=`<path d="M${sx} ${t} c1 10 13 12 10 26" fill="none" stroke="currentColor" stroke-width="2.2"/>`;}}
  return s+'</svg>';
+}
+// Sustenido, bemol e bequadro desenhados (não dependem da fonte do aparelho). (x,y) = centro na altura da nota; z = escala.
+function accSvg(x,y,k,z){
+ const t=`transform="translate(${x} ${y}) scale(${z})"`,bar=(dy)=>`<path d="M-7 ${dy+2}L7 ${dy-2}V${dy+1}L-7 ${dy+5}z"/>`;
+ if(k=='♯')return `<g ${t} fill="currentColor" stroke="currentColor"><path d="M-3 -11V15M3 -15V11" stroke-width="1.5" fill="none"/><g stroke="none">${bar(-6)}${bar(2)}</g></g>`;
+ if(k=='♭')return `<g ${t} fill="none" stroke="currentColor" stroke-linecap="round"><path d="M-4 -19V6" stroke-width="1.6"/><path d="M-4 6C4 1 8-3 5-6S-1-6-4-1" stroke-width="2.2"/></g>`;
+ return `<g ${t} fill="currentColor" stroke="currentColor"><path d="M-4 -15V5M4 -5V15" stroke-width="1.5" fill="none"/><g stroke="none"><path d="M-4 -3L4 -6V-3L-4 0z"/><path d="M-4 5L4 2V5L-4 8z"/></g></g>`;
 }
 const led=(cx,y)=>`<line x1="${cx-13}" x2="${cx+13}" y1="${y}" y2="${y}" stroke="currentColor" stroke-width="1.2"/>`;
 
@@ -123,6 +142,31 @@ function genLvl(L){
   const up=Math.random()<.5;
   return{svg:staff(sol?'sol':'fa',n),text:`Qual é a nota logo ${up?'acima':'abaixo'} desta na pauta?`,opts:N,ans:md(n+(up?1:-1)+(sol?2:4),7),tag:'Vizinha · '+cl+' · '+(up?'acima de ':'abaixo de ')+nm(n)};}
  return{svg:staff(sol?'sol':'fa',n),text:'Qual é o nome desta nota?',opts:N,ans:md(n+(sol?2:4),7),tag:cl+' · '+nm(n)};
+}
+
+/* ---------- sustenido e bemol ---------- */
+// Semitons de cada nota natural (Dó=0 ... Si=11) e os acidentes: [símbolo, semitons, nome].
+const SEM=[0,2,4,5,7,9,11],AC=[['',0,''],['♯',1,' sustenido'],['♭',-1,' bemol']];
+// Mi sustenido, Si sustenido, Dó bemol e Fá bemol ficam de fora: soam como Fá, Dó, Si e Mi e confundiriam o iniciante.
+const acOk=(i,a)=>!(a==1&&(i==2||i==6))&&!(a==2&&(i==0||i==3));
+const acNome=(i,a)=>N[i]+AC[a][2],acSom=(i,a)=>md(SEM[i]+AC[a][1],12);
+function genAcc(L){
+ const sol=L.c=='sol'||(L.c=='mix'&&Math.random()<.5),cl=sol?'Sol':'Fá';
+ let n,i,a;do{n=rnd(L.ns);i=md(n+(sol?2:4),7);a=Math.random()<.2?0:Math.random()<.5?1:2}while(!acOk(i,a)||n===lastN&&L.ns.length>1);lastN=n;
+ // Alternativas: a mesma nota com os outros acidentes primeiro (Si, Si sustenido...), depois as notas vizinhas.
+ // Nenhuma alternativa errada pode soar igual à certa (ex.: Lá sustenido quando a resposta é Si bemol).
+ const ok=(j,b)=>acOk(j,b)&&acSom(j,b)!=acSom(i,a)&&!(j==i&&b==a);
+ const mesma=shuf([0,1,2].filter(b=>ok(i,b)).map(b=>acNome(i,b)));
+ const viz=shuf([md(i-1,7),md(i+1,7)].flatMap(j=>[0,1,2].filter(b=>ok(j,b)).map(b=>acNome(j,b))));
+ const o=[acNome(i,a),...[...mesma,...viz].slice(0,3)];
+ return{svg:staff(sol?'sol':'fa',n,'q',AC[a][0]),text:'Qual é o nome desta nota?',opts:o,ans:0,tag:cl+' · '+acNome(i,a)};
+}
+function acConceito(){
+ const r=Math.random(),ef=['Subir meio tom','Descer meio tom','Voltar ao som natural','Durar o dobro'];
+ if(r<.45){const k=rnd([0,1,2]);return{svg:V(accSvg(80,52,['♯','♭','♮'][k],2.4)),text:`O ${['sustenido','bemol','bequadro'][k]} faz a nota:`,opts:ef,ans:k,tag:'Efeito · '+['sustenido','bemol','bequadro'][k]};}
+ if(r<.6)return{text:'Onde se escreve o sustenido ou o bemol?',opts:['Antes da nota','Depois da nota','Embaixo da pauta','No fim do compasso'],ans:0,tag:'Onde se escreve'};
+ let i,a;do{i=Math.floor(Math.random()*7);a=1+Math.floor(Math.random()*2)}while(!acOk(i,a));
+ return{text:`Como se chama a nota ${N[i]} com um ${a==1?'sustenido (♯)':'bemol (♭)'} antes dela?`,opts:[acNome(i,a),N[i],...(acOk(i,3-a)?[acNome(i,3-a)]:[]),N[md(i+(a==1?1:-1),7)]],ans:0,tag:'Nome · '+acNome(i,a)};
 }
 
 /* ---------- figuras ---------- */
@@ -174,11 +218,11 @@ function cpDivisao(){const r=Math.random();
 function cpClasseC(){const c=rnd(COMP),o=['Binário composto','Ternário composto','Quaternário composto','Binário simples'];return{svg:fmSvg(...c),text:`O compasso ${fmt(c)} é:`,opts:o,ans:c[0]/3-2,tag:'Classificação · '+fmt(c)};}
 
 /* ---------- trilhas (níveis estilo Duolingo) ---------- */
-const META=90; // % mínimo de acertos para abrir o próximo nível
+const META=70; // % mínimo de acertos para abrir o próximo nível
 // Cada nível: id (único entre todas as trilhas), u = unidade, t/d = título e descrição,
 // g = gerador de questão; n = nº de questões (padrão 10); mix = sorteia entre os outros níveis da trilha.
 const TR={
- notas:{units:[['Clave de Sol','Os primeiros passos na leitura'],['Clave de Fá','Agora a pauta dos graves'],['Desafios','As duas claves juntas']],lv:[
+ notas:{units:[['Clave de Sol','Os primeiros passos na leitura'],['Clave de Fá','Agora a pauta dos graves'],['Desafios','As duas claves juntas'],['Sustenido e bemol','Notas com acidente: Si bemol, Fá sustenido...']],lv:[
   {id:'s1',u:0,t:'Primeiras notas',d:'Dó, Ré, Mi, Fá e Sol',c:'sol',ns:R(-2,2)},
   {id:'s2',u:0,t:'Lá, Si e Dó',d:'Subindo a pauta',c:'sol',ns:R(0,5)},
   {id:'s3',u:0,t:'Notas nas linhas',d:'Mi, Sol, Si, Ré e Fá',c:'sol',ns:[0,2,4,6,8]},
@@ -193,7 +237,12 @@ const TR={
   {id:'f5',u:1,t:'Pauta inteira',d:'Todas as notas, com o Dó central',c:'fa',ns:R(-2,10)},
   {id:'f6',u:1,t:'Linhas suplementares',d:'Notas acima e abaixo da pauta da clave de Fá',c:'fa',ns:[-4,-3,-2,-1,9,10,11,12]},
   {id:'d1',u:2,t:'Sol ou Fá?',d:'As duas claves misturadas',c:'mix',ns:R(-2,9)},
-  {id:'d2',u:2,t:'Desafio final',d:'Tudo junto, 15 questões',c:'mix',ns:R(-4,12),k:'mix',n:15}]},
+  {id:'d2',u:2,t:'Desafio final',d:'Tudo junto, 15 questões',c:'mix',ns:R(-4,12),k:'mix',n:15},
+  // unidade nova no fim da trilha, para não trancar os níveis que os alunos já fizeram
+  {id:'ac1',u:3,t:'Para que servem?',d:'O que fazem o sustenido, o bemol e o bequadro',g:acConceito},
+  {id:'ac2',u:3,t:'Acidentes na clave de Sol',d:'Ex.: Si bemol, Fá sustenido',g:()=>genAcc({c:'sol',ns:R(-1,9)})},
+  {id:'ac3',u:3,t:'Acidentes na clave de Fá',d:'As mesmas notas, na pauta dos graves',g:()=>genAcc({c:'fa',ns:R(-1,9)})},
+  {id:'ac4',u:3,t:'Desafio dos acidentes',d:'As duas claves juntas, 15 questões',n:15,g:()=>genAcc({c:'mix',ns:R(-2,10)})}]},
  figuras:{units:[['Conhecendo as figuras','Nome e valor de cada uma'],['Comparando figuras','Quem dura mais e quantas cabem'],['Desafio','Tudo junto']],lv:[
   {id:'fg1',u:0,t:'As três primeiras',d:'Semibreve, mínima e semínima',g:()=>fgNome(3)},
   {id:'fg2',u:0,t:'Colcheia e semicolcheia',d:'Agora as cinco figuras',g:()=>fgNome(5)},
@@ -231,11 +280,11 @@ const lvlOpen=(k,i)=>owner||i==0||lvlBest(k,i-1)>=META;
 const lvlDone=k=>TR[k].lv.filter((_,i)=>lvlBest(k,i)>=META).length;
 function trilhaScr(k){
  const T=TR[k],M=MODS[k];
- let h=`<button data-home>← Voltar</button><h2>${M.i} ${M.t}</h2><div class="mut">Acerte pelo menos ${META}% em um nível para abrir o próximo.</div>${T.lesson?'<button data-lesson style="margin-top:10px">📖 Ver a lição dos símbolos</button>':''}`;
+ let h=`<button data-home>← Voltar</button><h2>${M.i} ${M.t}</h2><div class="mut">Acerte pelo menos ${META}% em um nível para abrir o próximo. Estrelas: ${ESTR_TXT}</div>${T.lesson?'<button data-lesson style="margin-top:10px">📖 Ver a lição dos símbolos</button>':''}`;
  T.lv.forEach((L,i)=>{
   if(i==0||T.lv[i-1].u!=L.u)h+=`<div class="unit">Unidade ${L.u+1} · ${T.units[L.u][0]}<div class="mut">${T.units[L.u][1]}</div></div>`;
   const b=lvlBest(k,i),ok=b>=META,op=lvlOpen(k,i),x=[0,.65,1,.65,0,-.65,-1,-.65][i%8];
-  h+=`<div class="node-row" style="transform:translateX(calc(${x} * min(85px, 10vw)))"><button class="node ${ok?'done':op?'cur':'lock'}" ${op?`data-lvl="${k}|${i}"`:'disabled'} aria-label="${esc(L.t)}">${ok?'✓':op?i+1:'🔒'}</button><div class="node-lbl"><b>${esc(L.t)}</b><div class="mut">${esc(L.d)}${b!=null?' · melhor: '+b+'%':''}</div></div></div>`;
+  h+=`<div class="node-row" style="transform:translateX(calc(${x} * min(85px, 10vw)))"><button class="node ${ok?'done':op?'cur':'lock'}" ${op?`data-lvl="${k}|${i}"`:'disabled'} aria-label="${esc(L.t)}">${ok?'✓':op?i+1:'🔒'}</button><div class="node-lbl"><b>${esc(L.t)}</b><div class="mut">${esc(L.d)}${b!=null?' · melhor: '+b+'%':''}</div>${b!=null&&!owner?`<div class="node-st">⭐ ${ESTR(b)} de 10</div>`:''}</div></div>`;
  });
  return h;
 }
@@ -244,11 +293,93 @@ function startLvl(k,i){
  {const o=P.stats[curMod]||{ok:0,tot:0,hist:[],r:0};o.s=(o.s||0)+1;P.stats[curMod]=o;}
  Q=Array.from({length:L.n||10},()=>({...genQ(L),m:curMod}));qi=0;okc=0;view='quiz';showQ();
 }
+/* ---------- estrelas e personagem ---------- */
+// Estrelas pelo melhor resultado de cada nível (e de cada prova). Repetir um nível só dá estrelas se melhorar.
+const ESTR=p=>p>=100?10:p>=90?7:p>=80?5:p>=70?3:0;
+const ESTR_TXT='70% = 3 ⭐ · 80% = 5 ⭐ · 90% = 7 ⭐ · 100% = 10 ⭐';
+const lvlStars=(st,id)=>ESTR(st?.['t:'+id]?.best||0);
+const starsOf=(st,ex)=>Object.keys(ALL).reduce((t,id)=>t+lvlStars(st,id),0)
+ +Object.values(ex||{}).reduce((t,r)=>t+(r&&r.ok!=null&&r.tot?ESTR(Math.round(100*r.ok/r.tot)):0),0);
+const CORES={roxo:['Roxo','#8b5cf6',0],azul:['Azul','#3b82f6',0],verde:['Verde','#22c55e',0],laranja:['Laranja','#f97316',0],rosa:['Rosa','#ec4899',0],ouro:['Dourado','#eab308',300]};
+// Tipos de acessório: o aluno pode usar vários ao mesmo tempo, um de cada tipo.
+const CATS={rosto:['👓','Óculos'],topo:['🎩','Cabeça'],orelha:['🎧','Fones'],pescoco:['🎀','Pescoço'],mao:['🎤','Na mão']};
+const coracao=(x,y)=>`<path d="M${x} ${y+9}C${x-15} ${y-1} ${x-9} ${y-13} ${x} ${y-5}C${x+9} ${y-13} ${x+15} ${y-1} ${x} ${y+9}z"/>`;
+const estrela=(x,y,R,r)=>'<polygon points="'+Array.from({length:10},(_,i)=>{const a=Math.PI*i/5-Math.PI/2,d=i%2?r:R;return (x+d*Math.cos(a)).toFixed(1)+','+(y+d*Math.sin(a)).toFixed(1)}).join(' ')+'"/>';
+const maoAv='<circle cx="98" cy="88" r="7" fill="var(--avc)"/>';
+// Acessórios: [nome, estrelas para liberar, tipo, desenho]
+const ACS={
+ // óculos
+ oculos:['Óculos redondos',10,'rosto','<g fill="none" stroke="#1f2937" stroke-width="3"><circle cx="47" cy="68" r="11"/><circle cx="73" cy="68" r="11"/><path d="M58 67h4M36 66l-12-4M84 66l12-4"/></g>'],
+ quadrado:['Óculos quadrados',30,'rosto','<g fill="none" stroke="#7c2d12" stroke-width="3"><rect x="35" y="58" width="23" height="19" rx="3"/><rect x="62" y="58" width="23" height="19" rx="3"/><path d="M58 66h4M35 64l-11-3M85 64l11-3"/></g>'],
+ escuros:['Óculos escuros',70,'rosto','<g fill="#111827" stroke="#111827" stroke-width="2.5"><path d="M33 61h25q0 17-12 17t-13-17zM62 61h25q-1 17-13 17t-12-17z"/><path d="M58 63h4M33 62l-9-3M87 62l9-3" fill="none"/></g><path d="M38 65l5-2M67 65l5-2" stroke="#fff" stroke-width="2" opacity=".6"/>'],
+ coracao:['Óculos de coração',110,'rosto','<g fill="#f472b6" fill-opacity=".75" stroke="#db2777" stroke-width="2.5">'+coracao(47,68)+coracao(73,68)+'</g><path d="M58 66h4M34 64l-10-3M86 64l10-3" stroke="#db2777" stroke-width="2.5"/>'],
+ estrelado:['Óculos de estrela',170,'rosto','<g fill="#fde047" fill-opacity=".8" stroke="#ca8a04" stroke-width="2.2" stroke-linejoin="round">'+estrela(47,68,14,7)+estrela(73,68,14,7)+'</g><path d="M59 66h2" stroke="#ca8a04" stroke-width="3"/>'],
+ monoculo:['Monóculo',230,'rosto','<circle cx="73" cy="68" r="11" fill="#fff" fill-opacity=".15" stroke="#ca8a04" stroke-width="3"/><path d="M80 77q6 14 0 26" fill="none" stroke="#ca8a04" stroke-width="1.5" stroke-dasharray="2 2"/>'],
+ // cabeça
+ laco:['Laço',20,'topo','<g fill="#ec4899"><path d="M44 40 26 30v22z"/><path d="M48 40 66 30v22z"/><circle cx="46" cy="40" r="6" fill="#be185d"/></g>'],
+ bone:['Boné',50,'topo','<path d="M25 57a35 30 0 0 1 70 0z" fill="#2563eb"/><path d="M88 52q18 2 24 9l-26 1z" fill="#1d4ed8"/><circle cx="60" cy="28" r="3.5" fill="#1d4ed8"/>'],
+ festa:['Chapéu de festa',90,'topo','<path d="M44 42 60 4l16 38z" fill="#a855f7"/><path d="M50 28h20M47 36h26M54 18h12" stroke="#fde047" stroke-width="3"/><circle cx="60" cy="5" r="5" fill="#fde047"/>'],
+ cartola:['Cartola',140,'topo','<rect x="42" y="2" width="36" height="36" rx="3" fill="#111827"/><rect x="42" y="28" width="36" height="6" fill="#dc2626"/><rect x="30" y="36" width="60" height="7" rx="3" fill="#111827"/>'],
+ gorro:['Gorro de inverno',190,'topo','<path d="M26 52q2-38 34-38t34 38z" fill="#dc2626"/><rect x="23" y="46" width="74" height="10" rx="5" fill="#f5f5f4"/><circle cx="60" cy="13" r="7" fill="#f5f5f4"/>'],
+ // fones
+ fone:['Fone de ouvido',40,'orelha','<path d="M24 70a36 40 0 0 1 72 0" fill="none" stroke="#374151" stroke-width="6"/><rect x="14" y="60" width="13" height="24" rx="5" fill="#374151"/><rect x="93" y="60" width="13" height="24" rx="5" fill="#374151"/>'],
+ fone_gato:['Fone de gatinho',150,'orelha','<path d="M30 40 34 20l14 12zM90 40 86 20 72 32z" fill="#f9a8d4" stroke="#db2777" stroke-width="2"/><path d="M24 70a36 40 0 0 1 72 0" fill="none" stroke="#f9a8d4" stroke-width="6"/><rect x="14" y="60" width="13" height="24" rx="5" fill="#f472b6"/><rect x="93" y="60" width="13" height="24" rx="5" fill="#f472b6"/>'],
+ // pescoço
+ gravata:['Gravata borboleta',25,'pescoco','<g fill="#dc2626"><path d="M60 104 44 95v18z"/><path d="M60 104 76 95v18z"/><circle cx="60" cy="104" r="4.5" fill="#991b1b"/></g>'],
+ cachecol:['Cachecol',80,'pescoco','<path d="M30 98q30 14 60 0l2 9q-32 15-64 0z" fill="#16a34a"/><path d="M72 104l8 0 2 20-9 1z" fill="#15803d"/><path d="M40 101l3 6M52 104l2 7M64 104l1 7" stroke="#bbf7d0" stroke-width="2.5"/>'],
+ colar:['Colar de notas',160,'pescoco','<path d="M34 96q26 16 52 0" fill="none" stroke="#ca8a04" stroke-width="1.5"/><g fill="#1f2937"><circle cx="44" cy="102" r="3"/><circle cx="60" cy="105.5" r="3.5"/><circle cx="76" cy="102" r="3"/></g><path d="M47 102v-9M63.5 105v-10M79 102v-9" stroke="#1f2937" stroke-width="1.5"/>'],
+ medalha:['Medalha de ouro',250,'pescoco','<path d="M48 92l12 16 12-16" fill="none" stroke="#2563eb" stroke-width="5"/><circle cx="60" cy="112" r="9" fill="#facc15" stroke="#ca8a04" stroke-width="2"/><g fill="#ca8a04">'+estrela(60,112,5,2.2)+'</g>'],
+ // na mão
+ batuta:['Batuta de maestro',60,'mao','<path d="M99 86 118 46" stroke="#f5f5f4" stroke-width="3.5" stroke-linecap="round"/><path d="M99 86 104 76" stroke="#78350f" stroke-width="6" stroke-linecap="round"/>'+maoAv],
+ maraca:['Maraca',100,'mao','<path d="M99 86 108 66" stroke="#78350f" stroke-width="4" stroke-linecap="round"/><ellipse cx="111" cy="57" rx="8" ry="11" transform="rotate(25 111 57)" fill="#f97316"/><path d="M106 52l9 5M104 58l9 5" stroke="#fde047" stroke-width="2"/>'+maoAv],
+ microfone:['Microfone',130,'mao','<path d="M99 86 107 66" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/><circle cx="110" cy="59" r="8" fill="#9ca3af" stroke="#4b5563" stroke-width="2"/><path d="M104 57h12M106 62h9" stroke="#4b5563" stroke-width="1.2"/>'+maoAv],
+ varinha:['Varinha mágica',210,'mao','<path d="M99 86 110 58" stroke="#1f2937" stroke-width="3" stroke-linecap="round"/><g fill="#fde047" stroke="#ca8a04" stroke-width="1.5">'+estrela(111,53,9,4)+'</g><circle cx="102" cy="46" r="1.5" fill="#fde047"/><circle cx="119" cy="64" r="1.5" fill="#fde047"/>'+maoAv],
+ coroa:['Coroa',280,'topo','<path d="M34 42V16l13 13 13-18 13 18 13-13v26z" fill="#facc15" stroke="#ca8a04" stroke-width="2" stroke-linejoin="round"/><circle cx="60" cy="32" r="4" fill="#dc2626"/><circle cx="44" cy="35" r="3" fill="#2563eb"/><circle cx="76" cy="35" r="3" fill="#16a34a"/>']};
+const ACS_ORD=['pescoco','rosto','orelha','topo','mao'];
+// Personagem: uma bolinha musical com rosto; a cor e os acessórios vêm de av = {c, on:[...]}
+function avatarSvg(av,w){
+ av=av||{};const cor=(CORES[av.c]||CORES.roxo)[1],on=(av.on||[]).filter(k=>ACS[k]);
+ const extra=ACS_ORD.map(sl=>on.filter(k=>ACS[k][2]==sl).map(k=>ACS[k][3]).join('')).join('');
+ return `<svg viewBox="0 0 120 128" width="${w||120}" role="img" aria-label="personagem" style="--avc:${cor}">`
+  +`<g><ellipse cx="46" cy="116" rx="11" ry="5.5" fill="${cor}"/><ellipse cx="74" cy="116" rx="11" ry="5.5" fill="${cor}"/><ellipse cx="46" cy="116" rx="11" ry="5.5" fill="#000" opacity=".25"/><ellipse cx="74" cy="116" rx="11" ry="5.5" fill="#000" opacity=".25"/></g>`
+  +`<circle cx="60" cy="75" r="38" fill="${cor}"/><ellipse cx="50" cy="56" rx="12" ry="7" fill="#fff" opacity=".25"/>`
+  +`<circle cx="47" cy="68" r="8" fill="#fff"/><circle cx="73" cy="68" r="8" fill="#fff"/><circle cx="49" cy="69" r="4" fill="#1f2937"/><circle cx="75" cy="69" r="4" fill="#1f2937"/>`
+  +`<ellipse cx="38" cy="83" rx="5" ry="3" fill="#fda4af" opacity=".8"/><ellipse cx="82" cy="83" rx="5" ry="3" fill="#fda4af" opacity=".8"/>`
+  +`<path d="M49 86q11 10 22 0" fill="none" stroke="#1f2937" stroke-width="3" stroke-linecap="round"/>`+extra+'</svg>';
+}
+// Próximo prêmio ainda trancado (acessório ou cor), para mostrar quanto falta.
+function proxPremio(s){
+ const l=[...Object.values(ACS).map(a=>[a[0],a[1]]),...Object.values(CORES).filter(c=>c[2]).map(c=>['Cor '+c[0].toLowerCase(),c[2]])].filter(x=>x[1]>s).sort((a,b)=>a[1]-b[1]);
+ return l[0];
+}
+function avatarCard(){
+ const s=starsOf(P.stats,P.exams),px=proxPremio(s);
+ return `<div class="card av-card">${avatarSvg(P.av,84)}<div style="flex:1"><div class="stars">⭐ ${s} estrela${s==1?'':'s'}</div><div class="mut">${px?`Faltam ${px[1]-s} ⭐ para liberar: <b>${esc(px[0])}</b>`:'Você liberou todos os prêmios! 🏆'}</div><div class="mut" style="font-size:12px;margin-top:2px">Por nível: ${ESTR_TXT}</div><button data-avatar style="margin-top:8px">🎨 Meu personagem</button></div></div>`;
+}
+let avCat='rosto'; // tipo de acessório aberto na tela do personagem
+function avatarScr(){
+ const s=starsOf(P.stats,P.exams),av=P.av||{},on=(av.on||[]).filter(k=>ACS[k]);
+ const usando=on.map(k=>ACS[k][0].toLowerCase());
+ let h=`<button data-home>← Voltar</button><h2>Meu personagem</h2><div class="card" style="text-align:center">${avatarSvg(av,170)}<div class="stars">⭐ ${s} estrela${s==1?'':'s'}</div><div class="mut">${usando.length?'Usando: '+esc(usando.join(', ')):'Sem acessórios'}</div><div class="mut" style="font-size:12px">Ganhe estrelas nos níveis e nas provas: ${ESTR_TXT}</div></div>`;
+ h+='<h3>Cor</h3><div class="av-grid">'+Object.entries(CORES).map(([k,c])=>{const ok=s>=c[2],sel=(av.c||'roxo')==k;
+  return `<button class="av-opt${sel?' on':''}" ${ok?`data-avcor="${k}"`:'disabled'}><span class="sw" style="background:${c[1]}"></span>${c[0]}${ok?'':`<div class="mut">🔒 ${c[2]} ⭐</div>`}</button>`}).join('')+'</div>';
+ // abas com os tipos de acessório e, abaixo, as opções do tipo aberto (a prévia já mostra o resto do que ele está usando)
+ h+='<h3>Acessórios</h3><div class="mut">Você pode usar vários ao mesmo tempo: um de cada tipo (óculos, cabeça, fone, pescoço e mão). Abra um tipo para ver as opções.</div><div class="av-cats">'+Object.entries(CATS).map(([ct,[ic,nm]])=>{
+  const l=Object.values(ACS).filter(a=>a[2]==ct),lib=l.filter(a=>s>=a[1]).length,usa=on.some(k=>ACS[k][2]==ct);
+  return `<button class="${avCat==ct?'on':''}" data-avcat="${ct}">${ic} ${nm}${usa?' ✓':''} <span class="mut">${lib}/${l.length}</span></button>`}).join('')+'</div>';
+ const outros=on.filter(k=>ACS[k][2]!=avCat),nenhum=outros.length==on.length;
+ h+=`<div class="av-grid"><button class="av-opt${nenhum?' on':''}" data-avnone="${avCat}">${avatarSvg({c:av.c,on:outros},64)}<div>Nenhum</div><div class="mut">${nenhum?'✓ sem '+CATS[avCat][1].toLowerCase():'tirar'}</div></button>`;
+ h+=Object.entries(ACS).filter(([,a])=>a[2]==avCat).map(([k,a])=>{const ok=s>=a[1],sel=on.includes(k);
+  return `<button class="av-opt${sel?' on':''}" ${ok?`data-avac="${k}"`:'disabled'}>${avatarSvg({c:av.c,on:[...outros,k]},64)}<div>${a[0]}</div><div class="mut">${ok?(sel?'✓ usando':'liberado'):'🔒 '+a[1]+' ⭐'}</div></button>`}).join('')+'</div>';
+ return h;
+}
+async function saveAv(av){P.av=av;$.innerHTML=avatarScr();const r=await api('avatar',{av});if(r.error)toast(r.error);}
+
 const modT=m=>{if(m.startsWith('t:')){const L=ALL[m.slice(2)];return MODS[L.tr].t+' · '+L.t;}return MODS[m]?.t||m;};
 
 /* ---------- estado e dados ---------- */
 let curLvl=0,curTr='notas',TOKEN=null,owner=false,NAME='',unl=['notas'],tab='praticar',view='home',prev=false;
-let accReset=null,accRstAsk=false,P={stats:{},err:{},exams:{}},allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
+let P={stats:{},err:{},exams:{}},news=[],pushKey=null,pushOn=[],pushHide=false,pushState='',allProg=[],allUnl={},roster=[],exams=[],openStu=null,editId=null,rmId=null,edelId=null,Q=[],qi=0,okc=0,curMod='',done=false,exm=null;
 const pct=s=>s&&s.tot?Math.round(100*s.ok/s.tot):null;
 try{TOKEN=sessionStorage.getItem('tk')}catch(e){}
 async function api(action,body){
@@ -259,13 +390,13 @@ async function api(action,body){
   return j;
  }catch(e){return{error:'Sem conexão com o servidor.'}}
 }
-function logout(){TOKEN=null;owner=false;try{sessionStorage.removeItem('tk')}catch(e){}P={stats:{},err:{},exams:{}};unl=['notas'];view='home';exm=null;draw();}
+function logout(){TOKEN=null;owner=false;try{sessionStorage.removeItem('tk')}catch(e){}P={stats:{},err:{},exams:{}};news=[];pushState='';unl=['notas'];view='home';exm=null;draw();}
 async function refresh(){
  if(!TOKEN){draw();return;}
  const r=await api('me');if(r.error||!TOKEN)return;
  owner=r.role=='prof';NAME=r.name;
- if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;accReset=r.accReset||null;allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
- else{unl=normU(r.unl);exams=r.exams;P={stats:r.prog.stats||{},err:r.prog.err||{},exams:r.prog.exams||{},cur:r.prog.cur};}
+ if(owner){roster=r.roster;exams=r.exams;allProg=r.allProg;pushOn=r.pushOn||[];allUnl={};for(const k in r.allUnl)allUnl[k]=normU(r.allUnl[k]);}
+ else{unl=normU(r.unl);exams=r.exams;news=r.news||[];pushKey=r.pushKey||null;P={stats:r.prog.stats||{},err:r.prog.err||{},exams:r.prog.exams||{},cur:r.prog.cur,av:r.prog.av||{}};checkPush();}
  draw();
 }
 async function saveP(){if(TOKEN&&!owner)await api('save',{stats:P.stats,err:P.err,cur:P.cur||null});}
@@ -283,6 +414,7 @@ const $=document.getElementById('app');
 function draw(){
  if(view=='quiz'||view=='lesson')return;
  if(view=='trilha'&&TOKEN){$.innerHTML=trilhaScr(curTr);return;}
+ if(view=='avatar'&&TOKEN&&!owner){$.innerHTML=avatarScr();return;}
  let h=`<h1>🎼 Teoria Musical</h1>`;
  if(!TOKEN){$.innerHTML=h+loginScr();return;}
  h+=`<div class="mut">Olá, ${esc(NAME)}! <button data-logout style="padding:2px 8px;font-size:12px">sair</button> ${owner?'':'Exercícios liberados pela professora conforme a aula.'}</div>`;
@@ -295,7 +427,8 @@ function loginScr(){
  return `<h2>Entrar</h2><div class="card"><input type="text" id="lg" placeholder="Login" autocapitalize="none"><br><br><input type="password" id="pw" placeholder="Senha" style="font:inherit;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:inherit"><br><br><button class="pri" data-login>Entrar</button><div class="fb" id="lerr" style="color:var(--bad)"></div><div class="mut">Alunos: login e senha criados pela professora.</div></div>`;
 }
 function home(){
- let h='<h2>Exercícios</h2>';
+ let h=owner?'':newsCard()+pushCard()+avatarCard();
+ h+='<h2>Exercícios</h2>';
  let c=0;for(const m of KEYS){if(!open(m))continue;c++;const d=lvlDone(m),n=TR[m].lv.length;
   h+=`<div class="card mod" data-start="${m}"><div><b>${MODS[m].i} ${MODS[m].t}</b><div class="mut">${MODS[m].d}</div><div class="bar" style="margin-top:6px;width:160px"><i style="width:${Math.round(100*d/n)}%"></i></div><div class="mut">${d==n?'Trilha completa! 🏆':d+' de '+n+' níveis concluídos'}</div></div><span class="pill">${d?'Continuar':'Começar'}</span></div>`;}
  if(!c)h+='<div class="card mut">Nenhum exercício liberado ainda. Aguarde a professora liberar.</div>';
@@ -339,18 +472,14 @@ function stuBody(r,a,un){
  return h;
 }
 function alunas(){
- let h=`<h2>Cadastrar aluno</h2><div class="card"><input type="text" id="nn" placeholder="Nome do aluno"> <input type="text" id="nl" placeholder="Login (ex.: ana)" autocapitalize="none"> <input type="text" id="np" placeholder="Senha"> <label>Início: <input type="date" id="nd"></label> <button class="pri" data-add>Cadastrar</button><div class="mut" style="margin-top:6px">O aluno entra com esse login e senha. Anote a senha: depois dela salva você só pode redefinir.</div></div><h2>Alunos</h2>`;
+ let h=`<h2>Cadastrar aluno</h2><div class="card"><input type="text" id="nn" placeholder="Nome do aluno"> <input type="text" id="nl" placeholder="Login (ex.: ana)" autocapitalize="none"> <input type="text" id="np" placeholder="Senha"> <label>Início: <input type="date" id="nd"></label> <button class="pri" data-add>Cadastrar</button><div class="mut" style="margin-top:6px">O aluno entra com esse login e senha. Anote a senha: depois dela salva você só pode redefinir.</div></div><h2 id="lista-alunos">Alunos</h2>`;
  if(!roster.length)h+='<div class="card mut">Nenhum aluno cadastrado.</div>';
- else{
-  // contagem de acessos: quantos entraram desde a última vez que a professora zerou
-  const entraram=roster.filter(r=>allProg.find(x=>x.id==r.id)?.acc).length;
-  h+=`<div class="card"><b>Acessos</b> <span class="mut">${accReset?'· contando desde '+fmtDT(accReset):'· contando desde o início'}</span><div style="margin:4px 0 8px">${entraram} de ${roster.length} aluno(s) entraram${accReset?' desde então':''}.</div>${accRstAsk?`<span class="mut">Zerar o último acesso e o nº de acessos de todos? Exercícios e provas não mudam.</span> <button data-accrstyes>Sim, zerar</button> <button data-accrstno>Não</button>`:`<button data-accrst>Zerar acessos</button>`}</div>`;
-  h+='<div class="mut">Clique no aluno para ver exercícios, provas e respostas.</div>';}
+ else h+='<div class="mut">Clique no aluno para ver exercícios, provas e respostas. ⭐ = estrelas do aluno · 🔔 = recebe notificações no celular.</div>';
  for(const r of roster){
   const u=r.id,a=allProg.find(x=>x.id==u),un=allUnl[u]||['notas'],isOpen=openStu==u;
   if(editId==u){h+=editForm(r);continue;}
   const feitas=exams.filter(e=>a?.exams?.[e.id]?.ok!=null).length,lib=exams.filter(e=>un.includes(e.id)).length;
-  h+=`<div class="card"><div class="mod" data-open="${u}"><div><b>${esc(r.name)}</b><div class="mut">${a?.acc?'Último acesso: '+fmtDT(a.acc):accReset?'Não entrou desde '+fmtDT(accReset):'Ainda não acessou'} · provas: ${feitas} feita(s) de ${lib} liberada(s)</div></div><span class="pill">${isOpen?'▾ fechar':'▸ abrir'}</span></div>`;
+  h+=`<div class="card"><div class="mod" data-open="${u}"><div style="display:flex;gap:10px;align-items:center">${avatarSvg(a?.av,44)}<div><b>${esc(r.name)}</b> <span class="mut">⭐ ${starsOf(a?.stats,a?.exams)}${pushOn.includes(u)?' · 🔔':''}</span><div class="mut">${a?.acc?'Último acesso: '+fmtDT(a.acc):'Ainda não acessou'} · provas: ${feitas} feita(s) de ${lib} liberada(s)</div></div></div><span class="pill">${isOpen?'▾ fechar':'▸ abrir'}</span></div>`;
   if(isOpen)h+=stuBody(r,a,un);
   h+='</div>';}
  return h;
@@ -406,17 +535,21 @@ async function next(){
  const tot=Q.length,p=Math.round(100*okc/tot);
  if(exm&&exm.qs){sendExam();return;}
  if(exm){P.cur=null;P.exams[exm.id]={ok:okc,tot,ts:Date.now()};await api('finishExam',{eid:exm.id,ok:okc,tot,err:P.err});
-  $.innerHTML=`<div class="card q"><h1>Prova concluída</h1><p>Você acertou ${okc} de ${tot}.</p><button class="pri" data-home>Início</button></div>`;exm=null;return;}
+  $.innerHTML=`<div class="card q"><h1>Prova concluída</h1><p>Você acertou ${okc} de ${tot}.</p>${ESTR(p)?`<div class="stars">+${ESTR(p)} ⭐</div>`:''}<button class="pri" data-home>Início</button></div>`;exm=null;return;}
+ const antes=ESTR(P.stats[curMod]?.best||0),totAntes=starsOf(P.stats,P.exams);
  P.cur=null;await saveRound(curMod,okc,tot);
- const k=curTr,i=curLvl,pass=p>=META,nx=TR[k].lv[i+1];
- $.innerHTML=`<div class="card q"><h1>${pass?'🎉':'💪'} ${okc} de ${tot}</h1><p>${pass?(nx?`Nível concluído! Abriu o próximo: <b>${esc(nx.t)}</b>`:`Parabéns, você completou a trilha de ${esc(MODS[k].t)}! 🏆`):`Faltou pouco! Você precisa de ${Math.ceil(META*tot/100)} acertos para abrir o próximo nível.`}</p>${pass&&nx?`<button class="pri" data-lvl="${k}|${i+1}">Próximo nível</button> `:''}<button ${pass?'':'class="pri"'} data-lvl="${k}|${i}">${pass?'Repetir':'Tentar de novo'}</button> <button data-trilha>Ver trilha</button></div>`;
+ const k=curTr,i=curLvl,pass=p>=META,nx=TR[k].lv[i+1],agora=ESTR(P.stats[curMod].best),ganho=agora-antes;
+ const px=proxPremio(totAntes),liberou=px&&totAntes+ganho>=px[1];
+ const est=owner?'':ganho>0?`<div class="stars">+${ganho} ⭐</div><div class="mut">Agora você tem ${totAntes+ganho} estrelas.${liberou?` Liberou: <b>${esc(px[0])}</b>! 🎁`:''}</div>`
+  :`<div class="mut">${!agora?'Faça pelo menos 70% para ganhar estrelas.':agora<10?`Você já tem ${agora} ⭐ neste nível. Faça um resultado melhor para ganhar mais.`:'Você já tem as 10 ⭐ deste nível!'}</div>`;
+ $.innerHTML=`<div class="card q"><h1>${pass?'🎉':'💪'} ${okc} de ${tot}</h1>${est}<p>${pass?(nx?`Nível concluído! Abriu o próximo: <b>${esc(nx.t)}</b>`:`Parabéns, você completou a trilha de ${esc(MODS[k].t)}! 🏆`):`Faltou pouco! Você precisa de ${Math.ceil(META*tot/100)} acertos para abrir o próximo nível.`}</p>${pass&&nx?`<button class="pri" data-lvl="${k}|${i+1}">Próximo nível</button> `:''}<button ${pass?'':'class="pri"'} data-lvl="${k}|${i}">${pass?'Repetir':'Tentar de novo'}</button> <button data-trilha>Ver trilha</button></div>`;
 }
 async function sendExam(){
  $.innerHTML='<div class="card q"><p>Enviando a prova…</p></div>';
  const r=await api('finishExam',{eid:exm.id,ans:exm.ans});
  if(r.error||r.ok==null){$.innerHTML=`<div class="card q"><h2>Não foi possível enviar</h2><p class="mut">${esc(r.error||'Tente de novo.')}</p><button class="pri" data-resend>Tentar enviar de novo</button></div>`;return;}
  P.cur=null;P.exams[exm.id]={ok:r.ok,tot:r.tot,ts:Date.now()};
- $.innerHTML=`<div class="card q"><h1>Prova concluída</h1><p>Você acertou ${r.ok} de ${r.tot}.</p><button class="pri" data-home>Início</button></div>`;exm=null;
+ $.innerHTML=`<div class="card q"><h1>Prova concluída</h1><p>Você acertou ${r.ok} de ${r.tot}.</p>${ESTR(Math.round(100*r.ok/r.tot))?`<div class="stars">+${ESTR(Math.round(100*r.ok/r.tot))} ⭐</div>`:''}<button class="pri" data-home>Início</button></div>`;exm=null;
 }
 const toast=t=>{const e=document.getElementById('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',3500);};
 const val=i=>(document.getElementById(i)||{}).value||'';
@@ -425,6 +558,14 @@ document.addEventListener('click',async e=>{
  const A=async(a,b,ok)=>{const r=await api(a,b);if(r.error)toast(r.error);else if(ok)toast(ok);await refresh();return r;};
  if(d.start)start(d.start);
  else if(d.lesson!=null)lesson();
+ else if(d.avatar!=null){view='avatar';draw();scrollTo(0,0);}
+ else if(d.avcor)saveAv({...P.av,c:d.avcor});
+ else if(d.avcat){avCat=d.avcat;$.innerHTML=avatarScr();}
+ else if(d.avnone)saveAv({...P.av,on:(P.av.on||[]).filter(x=>ACS[x]&&ACS[x][2]!=d.avnone)});
+ else if(d.avac){const k=d.avac,on=P.av.on||[];saveAv({...P.av,on:on.includes(k)?on.filter(x=>x!=k):[...on.filter(x=>ACS[x]&&ACS[x][2]!=ACS[k][2]),k]});}
+ else if(d.newsok!=null){news=[];draw();await api('seen');}
+ else if(d.pushon!=null)ativaPush();
+ else if(d.pushno!=null){pushHide=true;draw();}
  else if(d.exam)startExam(d.exam);
  else if(d.ans!=null)answer(+d.ans);
  else if(d.next!=null)next();
@@ -444,13 +585,11 @@ document.addEventListener('click',async e=>{
  else if(d.add!=null){const r=await A('addStudent',{name:val('nn'),login:val('nl'),password:val('np'),start:val('nd')},'Aluno cadastrado.');}
  else if(d.edit){editId=d.edit;rmId=null;draw();}
  else if(d.cancel!=null){editId=null;draw();}
- else if(d.save){const r=await A('editStudent',{id:d.save,name:val('ef-n'),login:val('ef-l'),password:val('ef-p'),start:val('ef-d')},'Salvo.');if(!r.error)editId=null;draw();}
+ // depois de salvar, fecha a edição e os detalhes do aluno e volta para a lista de alunos
+ else if(d.save){const r=await A('editStudent',{id:d.save,name:val('ef-n'),login:val('ef-l'),password:val('ef-p'),start:val('ef-d')},'Salvo.');if(!r.error){editId=null;openStu=null;rmId=null;}draw();if(!r.error)document.getElementById('lista-alunos')?.scrollIntoView({behavior:'smooth'});}
  else if(d.rm){rmId=d.rm;editId=null;draw();}
  else if(d.rmno!=null){rmId=null;draw();}
  else if(d.rmyes){await A('removeStudent',{id:d.rmyes});rmId=null;draw();}
- else if(d.accrst!=null){accRstAsk=true;draw();}
- else if(d.accrstno!=null){accRstAsk=false;draw();}
- else if(d.accrstyes!=null){accRstAsk=false;await A('resetAccess',{},'Acessos zerados. A contagem começa agora.');}
  else if(d.reset){const[u,id]=d.reset.split('|');await A('resetExam',{id:u,eid:id},'Nova tentativa liberada.');}
  else if(d.mkexam!=null){const mods=[...document.querySelectorAll('[data-em]:checked')].map(x=>x.dataset.em);
   await A('createExam',{title:val('et'),mods,n:+val('en')||10},'Prova criada.');}
@@ -482,6 +621,43 @@ function installCard(){
   :isIOS?'<div class="mut">No iPhone: toque em <b>Compartilhar</b> (o quadrado com a seta ↑) e depois em <b>Adicionar à Tela de Início</b>.</div>'
   :'<div class="mut">No menu do navegador (⋮), toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</div>';
  return `<div class="card install"><b>📲 Baixe o app no seu celular</b><div class="mut" style="margin:4px 0 10px">Assim você abre a Teoria Musical direto pela tela inicial, como um aplicativo.</div>${como} <button data-instno style="margin-top:8px">Agora não</button></div>`;
+}
+/* ---------- novidades e notificações ---------- */
+// Novidades: trilhas e provas que a professora liberou e o aluno ainda não viu.
+function newsCard(){
+ if(!news.length)return '';
+ const nome=x=>MODS[x]?`🎵 Trilha nova: <b>${MODS[x].t}</b>`:exams.find(e=>e.id==x)?`📝 Prova nova: <b>${esc(exams.find(e=>e.id==x).title)}</b>`:'';
+ const l=news.map(nome).filter(Boolean);
+ if(!l.length)return '';
+ return `<div class="card news"><b>🔔 Novidades da professora</b><ul style="margin:6px 0 10px;padding-left:20px">${l.map(x=>'<li>'+x+'</li>').join('')}</ul><button class="pri" data-newsok>Entendi</button></div>`;
+}
+// Notificação no celular (Web Push): avisa de prova nova e lembra de praticar no dia em que o aluno não entrar.
+const pushOk=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const b64=s=>{const p='='.repeat((4-s.length%4)%4),r=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,ch=>ch.charCodeAt(0));};
+async function checkPush(){
+ // Se o aparelho já está inscrito, reenvia a inscrição (caso o servidor tenha perdido) e não mostra o convite.
+ if(pushState||!pushKey||!pushOk()||Notification.permission!='granted')return;
+ pushState='checando';
+ try{const reg=await navigator.serviceWorker.ready,s=await reg.pushManager.getSubscription();
+  if(s){pushState='on';await api('pushSub',{sub:s.toJSON()});}else pushState='';}catch(e){pushState='';}
+ draw();
+}
+function pushCard(){
+ if(!pushKey||pushHide||pushState=='on'||pushState=='checando')return '';
+ if(!pushOk())return isIOS&&!isStandalone()?'<div class="card mut">🔔 Para receber avisos de provas novas e lembretes, instale o app na tela inicial (veja acima) e entre por ele.</div>':'';
+ if(Notification.permission=='denied')return '';
+ return `<div class="card install"><b>🔔 Ativar lembretes</b><div class="mut" style="margin:4px 0 10px">Receba um aviso quando a professora liberar uma prova nova e um lembrete nos dias em que você não praticar.</div><button class="pri" data-pushon>Ativar notificações</button> <button data-pushno>Agora não</button></div>`;
+}
+async function ativaPush(){
+ try{
+  const perm=await Notification.requestPermission();
+  if(perm!='granted'){toast('As notificações não foram permitidas.');pushHide=true;draw();return;}
+  const reg=await navigator.serviceWorker.ready;
+  const s=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(pushKey)});
+  const r=await api('pushSub',{sub:s.toJSON()});
+  if(r.error){toast(r.error);return;}
+  pushState='on';toast('Pronto! Você vai receber os lembretes. 🔔');draw();
+ }catch(e){toast('Não foi possível ativar as notificações neste aparelho.');}
 }
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();instEv=e;draw();});
 addEventListener('appinstalled',()=>{instEv=null;instHide=true;toast('App instalado! 🎉');draw();});
