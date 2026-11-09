@@ -1,12 +1,14 @@
 // Provas prontas, com questões fixas. Ficam só no servidor: a aluna nunca recebe o gabarito.
 // Cada questão: t = enunciado, o = alternativas, a = índice da alternativa certa (0 = A, 1 = B, 2 = C, 3 = D).
+// off: true = questão retirada. Fica no arquivo só para não bagunçar as respostas de quem já fez a prova
+// (as respostas são guardadas pela posição da questão); o aluno não recebe e ela não conta na nota.
 module.exports = {
   msa: {
     title: 'Prova de Teoria Musical – MSA',
     qs: [
       { t: 'Quantas linhas e quantos espaços tem a pauta?', o: ['4 linhas e 5 espaços', '5 linhas e 4 espaços', '5 linhas e 5 espaços', '4 linhas e 4 espaços'], a: 1 },
-      { t: 'Qual clave indica que a 2ª linha da pauta é a nota Sol?', o: ['Clave de Fá', 'Clave de Dó', 'Clave de Sol', 'Nenhuma das anteriores'], a: 2 },
-      { t: 'Em qual linha a clave de Fá indica a nota Fá?', o: ['4ª linha', '2ª linha', '1ª linha', '3ª linha'], a: 0 },
+      { t: 'Qual clave indica que a 2ª linha da pauta é a nota Sol?', o: ['Clave de Fá', 'Clave de Dó', 'Clave de Sol', 'Nenhuma das anteriores'], a: 2, off: true },
+      { t: 'Em qual linha a clave de Fá indica a nota Fá?', o: ['4ª linha', '2ª linha', '1ª linha', '3ª linha'], a: 0, off: true },
       { t: 'Qual destas figuras tem a maior duração?', o: ['Semibreve', 'Mínima', 'Semínima', 'Colcheia'], a: 0 },
       { t: 'Tendo a semínima como unidade de tempo, quantos tempos vale a mínima?', o: ['1 tempo', '4 tempos', '2 tempos', 'Meio tempo'], a: 2 },
       { t: 'Quantas colcheias equivalem a uma semínima?', o: ['4', '2', '3', '8'], a: 1 },

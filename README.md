@@ -81,7 +81,7 @@ A trilha **Notas musicais** termina com a unidade **Sustenido e bemol**: para qu
 
 ### Provas
 
-- **Provas prontas** (em `api/_provas.js`): Prova de Teoria Musical – MSA (19 questões), Unidade de tempo (16) e Propriedades do som e elementos da música (16). Elas não precisam ser adicionadas: basta liberar para cada aluno na aba **Alunos**.
+- **Provas prontas** (em `api/_provas.js`): Prova de Teoria Musical – MSA (17 questões), Unidade de tempo (16) e Propriedades do som e elementos da música (16). Elas não precisam ser adicionadas: basta liberar para cada aluno na aba **Alunos**.
 - **Provas sorteadas**: criadas na aba **Provas**, escolhendo os módulos e o número de questões.
 - Nas provas de questões fixas, a correção é feita no servidor, e o aluno nunca recebe o gabarito.
 

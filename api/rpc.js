@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const PROVAS = require('./_provas');
 const PUSH = require('./_push');
 // Provas prontas: existem sempre (não precisam ser "adicionadas"); o id é a chave do arquivo _provas.js.
-const PRONTAS = Object.fromEntries(Object.entries(PROVAS).map(([id, p]) => [id, { title: p.title, qs: p.qs, n: p.qs.length, pronta: true }]));
+const PRONTAS = Object.fromEntries(Object.entries(PROVAS).map(([id, p]) => [id, { title: p.title, qs: p.qs, n: p.qs.filter((q) => !q.off).length, pronta: true }]));
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
@@ -110,7 +110,7 @@ module.exports = async (req, res) => {
         prog.exams = prog.exams || {}; prog.exams[b.eid] = { start: Date.now() };
         await redis.set('prog:' + id, prog);
         // Prova de questões fixas: a aluna recebe só enunciado e alternativas, sem o gabarito.
-        if (e.qs) return res.json({ exam: { title: e.title, n: e.qs.length, qs: e.qs.map((q) => ({ t: q.t, o: q.o })) } });
+        if (e.qs) { const ativas = e.qs.filter((q) => !q.off); return res.json({ exam: { title: e.title, n: ativas.length, qs: ativas.map((q) => ({ t: q.t, o: q.o })) } }); }
         return res.json({ exam: { title: e.title, mods: e.mods, n: e.n } });
       }
       if (action === 'finishExam') {
@@ -119,12 +119,16 @@ module.exports = async (req, res) => {
         const e = exams[b.eid];
         if (e && e.qs) {
           // Correção feita aqui no servidor, a partir das respostas marcadas.
-          const ans = e.qs.map((q, i) => (Array.isArray(b.ans) && Number.isInteger(b.ans[i]) ? b.ans[i] : -1));
-          const ok = e.qs.filter((q, i) => ans[i] === q.a).length;
-          prog.exams[b.eid] = { ok, tot: e.qs.length, ts: Date.now(), ans };
+          // O aluno respondeu só as questões ativas; as respostas são guardadas na posição de cada questão no arquivo
+          // (questão retirada fica com null), para o gabarito da professora continuar batendo.
+          let k = 0;
+          const ans = e.qs.map((q) => { if (q.off) return null; const v = Array.isArray(b.ans) ? b.ans[k++] : undefined; return Number.isInteger(v) ? v : -1; });
+          const ativas = e.qs.filter((q) => !q.off);
+          const ok = e.qs.filter((q, i) => !q.off && ans[i] === q.a).length;
+          prog.exams[b.eid] = { ok, tot: ativas.length, ts: Date.now(), ans };
           prog.cur = null; prog.last = Date.now();
           await redis.set('prog:' + id, prog);
-          return res.json({ ok, tot: e.qs.length });
+          return res.json({ ok, tot: ativas.length });
         }
         prog.exams[b.eid] = { ok: +b.ok || 0, tot: +b.tot || 0, ts: Date.now() };
         prog.err = b.err || prog.err; prog.cur = null; prog.last = Date.now();
